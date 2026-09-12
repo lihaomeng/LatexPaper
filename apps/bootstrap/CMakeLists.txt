@@ -1,0 +1,20 @@
+# CEF 150 supplies the signed, sandbox-aware bootstrap executable.
+add_library(LightOverLeafApp SHARED main.cpp)
+target_link_libraries(LightOverLeafApp PRIVATE lol_composition lol_platform_qt lol_platform_cef lol_transport_cef lol_system_app lol_system_inbound libcef_lib libcef_dll_wrapper)
+target_include_directories(LightOverLeafApp PRIVATE "${CEF_ROOT}")
+target_compile_definitions(LightOverLeafApp PRIVATE UNICODE _UNICODE CEF_USE_BOOTSTRAP NOMINMAX WIN32_LEAN_AND_MEAN NTDDI_WIN10_FE=0x0A00000A)
+set_target_properties(LightOverLeafApp PROPERTIES OUTPUT_NAME LightOverLeaf
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>")
+lol_register(LightOverLeafApp composition desktop)
+add_dependencies(LightOverLeafApp lol_frontend)
+lol_deploy_cef(LightOverLeafApp)
+add_custom_target(LightOverLeafBootstrap DEPENDS LightOverLeafApp)
+if(BUILD_TESTING)
+  add_test(NAME LightOverLeafDesktopSmoke COMMAND "$<TARGET_FILE_DIR:LightOverLeafApp>/LightOverLeaf.exe" --smoke-test)
+  set_tests_properties(LightOverLeafDesktopSmoke PROPERTIES TIMEOUT 45)
+  add_test(NAME LightOverLeafRendererRecoverySmoke COMMAND "$<TARGET_FILE_DIR:LightOverLeafApp>/LightOverLeaf.exe" --smoke-test-renderer-crash)
+  add_test(NAME LightOverLeafRpcCancellationSmoke COMMAND "$<TARGET_FILE_DIR:LightOverLeafApp>/LightOverLeaf.exe" --smoke-test-rpc)
+  set_tests_properties(LightOverLeafRpcCancellationSmoke PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)
+  set_tests_properties(LightOverLeafDesktopSmoke LightOverLeafRendererRecoverySmoke PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)
+endif()
+

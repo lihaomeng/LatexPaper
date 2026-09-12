@@ -1,0 +1,4 @@
+add_library(lol_transport_loopback STATIC kloopbacktransport.cpp)
+target_include_directories(lol_transport_loopback PUBLIC include)
+target_link_libraries(lol_transport_loopback PUBLIC lol_rpc_core)
+lol_register(lol_transport_loopback transport loopback)

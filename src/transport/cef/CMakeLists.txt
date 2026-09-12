@@ -1,0 +1,4 @@
+add_library(lol_transport_cef STATIC kceftransport.cpp)
+target_include_directories(lol_transport_cef PUBLIC include)
+target_link_libraries(lol_transport_cef PRIVATE lol_rpc_core lol_platform_cef PUBLIC lol_platform_ports)
+lol_register(lol_transport_cef transport cef)

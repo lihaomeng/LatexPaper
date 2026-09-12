@@ -1,0 +1,5 @@
+add_library(lol_workspace_adapter_localfs STATIC src/klocalworkspacestore.cpp)
+target_include_directories(lol_workspace_adapter_localfs PUBLIC include)
+target_compile_definitions(lol_workspace_adapter_localfs PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(lol_workspace_adapter_localfs PUBLIC lol_workspace_outbound PRIVATE lol_workspace_domain bcrypt)
+lol_register(lol_workspace_adapter_localfs adapter workspace)

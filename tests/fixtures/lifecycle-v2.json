@@ -1,0 +1,401 @@
+[
+{"name":"AcceptedEvent missing sequence","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","sessionId":"session-a","id":"request-a","generation":1},"accepted":false},
+{"name":"AcceptedEvent valid","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","sessionId":"session-a","id":"request-a","generation":1,"sequence":1},"accepted":true},
+{"name":"AcceptedEvent missing version","type":"AcceptedEvent","value":{"event":"rpc.accepted","sessionId":"session-a","id":"request-a","generation":1,"sequence":1},"accepted":false},
+{"name":"AcceptedEvent missing event","type":"AcceptedEvent","value":{"version":2,"sessionId":"session-a","id":"request-a","generation":1,"sequence":1},"accepted":false},
+{"name":"AcceptedEvent missing sessionId","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","id":"request-a","generation":1,"sequence":1},"accepted":false},
+{"name":"AcceptedEvent missing id","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","sessionId":"session-a","generation":1,"sequence":1},"accepted":false},
+{"name":"AcceptedEvent missing generation","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","sessionId":"session-a","id":"request-a","sequence":1},"accepted":false},
+{"name":"AcceptedEvent extra","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","sessionId":"session-a","id":"request-a","generation":1,"extra":1,"sequence":1},"accepted":false},
+{"name":"AcceptedEvent generation","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","sessionId":"session-a","id":"request-a","generation":0,"sequence":1},"accepted":false},
+{"name":"AcceptedEvent session","type":"AcceptedEvent","value":{"version":2,"event":"rpc.accepted","sessionId":"../a","id":"request-a","generation":1,"sequence":1},"accepted":false},
+{"name":"AcceptedEvent version","type":"AcceptedEvent","value":{"version":3,"event":"rpc.accepted","sessionId":"session-a","id":"request-a","generation":1,"sequence":1},"accepted":false},
+{"name":"CancellationResponse valid","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","sessionId":"session-a","id":"request-a","generation":1,"accepted":true},"accepted":true},
+{"name":"CancellationResponse missing version","type":"CancellationResponse","value":{"method":"rpc.cancel","sessionId":"session-a","id":"request-a","generation":1,"accepted":true},"accepted":false},
+{"name":"CancellationResponse missing method","type":"CancellationResponse","value":{"version":2,"sessionId":"session-a","id":"request-a","generation":1,"accepted":true},"accepted":false},
+{"name":"CancellationResponse missing sessionId","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","id":"request-a","generation":1,"accepted":true},"accepted":false},
+{"name":"CancellationResponse missing id","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","sessionId":"session-a","generation":1,"accepted":true},"accepted":false},
+{"name":"CancellationResponse missing generation","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","sessionId":"session-a","id":"request-a","accepted":true},"accepted":false},
+{"name":"CancellationResponse missing accepted","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","sessionId":"session-a","id":"request-a","generation":1},"accepted":false},
+{"name":"CancellationResponse extra","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","sessionId":"session-a","id":"request-a","generation":1,"accepted":true,"extra":1},"accepted":false},
+{"name":"CancellationResponse generation","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","sessionId":"session-a","id":"request-a","generation":0,"accepted":true},"accepted":false},
+{"name":"CancellationResponse session","type":"CancellationResponse","value":{"version":2,"method":"rpc.cancel","sessionId":"../a","id":"request-a","generation":1,"accepted":true},"accepted":false},
+{"name":"CancellationResponse version","type":"CancellationResponse","value":{"version":3,"method":"rpc.cancel","sessionId":"session-a","id":"request-a","generation":1,"accepted":true},"accepted":false},
+  { "name": "connected session", "type": "ConnectedEvent", "value": { "version": 2, "event": "rpc.connected", "sessionId": "session-a" }, "accepted": true },
+  { "name": "connected invalid session", "type": "ConnectedEvent", "value": { "version": 2, "event": "rpc.connected", "sessionId": "../a" }, "accepted": false },
+  { "name": "connected unknown field", "type": "ConnectedEvent", "value": { "version": 2, "event": "rpc.connected", "sessionId": "session-a", "extra": true }, "accepted": false },
+  {
+    "name": "Cancellation valid",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1
+    },
+    "accepted": true
+  },
+  {
+    "name": "Cancellation missing version",
+    "type": "Cancellation",
+    "value": {
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation missing method",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation missing sessionId",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "id": "request-a",
+      "generation": 1
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation missing id",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "generation": 1
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation missing generation",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "id": "request-a"
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation unknown",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "extra": true
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation wrongVersion",
+    "type": "Cancellation",
+    "value": {
+      "version": 1,
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation invalidSession",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "sessionId": "session/a",
+      "id": "request-a",
+      "generation": 1
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation zeroGeneration",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "Cancellation unsafeGeneration",
+    "type": "Cancellation",
+    "value": {
+      "version": 2,
+      "method": "rpc.cancel",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 9007199254740992
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent valid",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": true
+  },
+  {
+    "name": "RequestEvent missing version",
+    "type": "RequestEvent",
+    "value": {
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent missing event",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent missing sessionId",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent missing id",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent missing generation",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent missing sequence",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent missing outcome",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent unknown",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded",
+      "extra": true
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent wrongVersion",
+    "type": "RequestEvent",
+    "value": {
+      "version": 1,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent invalidSession",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session/a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent zeroGeneration",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 0,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "RequestEvent unsafeGeneration",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 9007199254740992,
+      "sequence": 1,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "event failed",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "failed"
+    },
+    "accepted": true
+  },
+  {
+    "name": "event cancelled",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "cancelled"
+    },
+    "accepted": true
+  },
+  {
+    "name": "event timed-out",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "timed-out"
+    },
+    "accepted": true
+  },
+  {
+    "name": "zero sequence",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 0,
+      "outcome": "succeeded"
+    },
+    "accepted": false
+  },
+  {
+    "name": "unknown outcome",
+    "type": "RequestEvent",
+    "value": {
+      "version": 2,
+      "event": "rpc.completed",
+      "sessionId": "session-a",
+      "id": "request-a",
+      "generation": 1,
+      "sequence": 1,
+      "outcome": "waiting"
+    },
+    "accepted": false
+  }
+]

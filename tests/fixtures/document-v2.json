@@ -1,0 +1,76 @@
+[
+  {
+    "name": "document open unicode file id",
+    "type": "DocumentOpenRequest",
+    "value": {
+      "version": 2,
+      "id": "document-open",
+      "clientSequence": 3,
+      "method": "document.open",
+      "params": { "fileId": "章节/引言.tex" }
+    },
+    "accepted": true
+  },
+  {
+    "name": "document open rejects unknown param",
+    "type": "DocumentOpenRequest",
+    "value": {
+      "version": 2,
+      "id": "document-open",
+      "clientSequence": 3,
+      "method": "document.open",
+      "params": { "fileId": "main.tex", "nativePath": "D:/secret" }
+    },
+    "accepted": false
+  },
+  {
+    "name": "document save empty content",
+    "type": "DocumentSaveRequest",
+    "value": {
+      "version": 2,
+      "id": "document-save",
+      "clientSequence": 9,
+      "method": "document.save",
+      "params": { "fileId": "main.tex", "content": "", "expectedRevision": "abc-123" }
+    },
+    "accepted": true
+  },
+  {
+    "name": "document save rejects bad revision",
+    "type": "DocumentSaveRequest",
+    "value": {
+      "version": 2,
+      "id": "document-save",
+      "clientSequence": 9,
+      "method": "document.save",
+      "params": { "fileId": "main.tex", "content": "内容", "expectedRevision": "../old" }
+    },
+    "accepted": false
+  },
+  {
+    "name": "document open response",
+    "type": "DocumentOpenResponse",
+    "value": {
+      "version": 2,
+      "id": "document-open",
+      "clientSequence": 3,
+      "ok": true,
+      "method": "document.open",
+      "result": { "fileId": "章节/引言.tex", "content": "你好，LaTeX", "revision": "abc-123", "utf8Bom": false }
+    },
+    "accepted": true
+  },
+  {
+    "name": "document save response",
+    "type": "DocumentSaveResponse",
+    "value": {
+      "version": 2,
+      "id": "document-save",
+      "clientSequence": 9,
+      "ok": true,
+      "method": "document.save",
+      "result": { "fileId": "main.tex", "revision": "def-456" }
+    },
+    "accepted": true
+  }
+]

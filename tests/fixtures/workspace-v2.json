@@ -1,0 +1,101 @@
+[
+  { "name": "workspace refresh request", "type": "WorkspaceRequest", "accepted": true,
+    "value": { "version": 2, "id": "workspace-refresh", "clientSequence": 2,
+      "method": "workspace.refresh", "params": {} } },
+  { "name": "manage directory request", "type": "WorkspaceManageDirectoryRequest", "accepted": true,
+    "value": { "version": 2, "id": "manage-directory", "clientSequence": 2,
+      "method": "workspace.manageDirectory",
+      "params": { "workspaceId": "workspace-1", "operation": "rename",
+        "directoryId": "章节", "destination": "正文" } } },
+  { "name": "manage directory missing destination", "type": "WorkspaceManageDirectoryRequest", "accepted": false,
+    "value": { "version": 2, "id": "manage-directory", "clientSequence": 2,
+      "method": "workspace.manageDirectory",
+      "params": { "workspaceId": "workspace-1", "operation": "remove", "directoryId": "章节" } } },
+  { "name": "manage file request", "type": "WorkspaceManageRequest", "accepted": true,
+    "value": { "version": 2, "id": "manage-file", "clientSequence": 1, "method": "workspace.manageFile",
+      "params": { "workspaceId": "workspace-1", "operation": "rename", "fileId": "原稿.tex", "destination": "新稿.tex" } } },
+  { "name": "manage unknown operation", "type": "WorkspaceManageRequest", "accepted": false,
+    "value": { "version": 2, "id": "manage-file", "clientSequence": 1, "method": "workspace.manageFile",
+      "params": { "workspaceId": "workspace-1", "operation": "erase-root", "fileId": "原稿.tex", "destination": "" } } },
+  { "name": "manage missing workspace", "type": "WorkspaceManageRequest", "accepted": false,
+    "value": { "version": 2, "id": "manage-file", "clientSequence": 1, "method": "workspace.manageFile",
+      "params": { "operation": "create", "fileId": "原稿.tex", "destination": "" } } },
+  {
+    "name": "workspace open request",
+    "type": "WorkspaceRequest",
+    "value": {
+      "version": 2,
+      "id": "workspace-open",
+      "clientSequence": 1,
+      "method": "workspace.open",
+      "params": {}
+    },
+    "accepted": true
+  },
+  {
+    "name": "workspace request never accepts native path",
+    "type": "WorkspaceRequest",
+    "value": {
+      "version": 2,
+      "id": "workspace-open",
+      "clientSequence": 1,
+      "method": "workspace.open",
+      "params": { "path": "D:/project" }
+    },
+    "accepted": false
+  },
+  {
+    "name": "workspace state unicode entries",
+    "type": "WorkspaceStateResponse",
+    "value": {
+      "version": 2,
+      "id": "workspace-state",
+      "clientSequence": 2,
+      "ok": true,
+      "method": "workspace.getState",
+      "result": {
+        "workspaceId": "workspace-0123",
+        "displayName": "论文项目",
+        "revision": "revision-0123",
+        "entries": [
+          { "fileId": "章节", "directory": true, "sizeBytes": 0 },
+          { "fileId": "章节/引言.tex", "directory": false, "sizeBytes": 128 }
+        ]
+      }
+    },
+    "accepted": true
+  },
+  {
+    "name": "workspace state rejects entry extension",
+    "type": "WorkspaceStateResponse",
+    "value": {
+      "version": 2,
+      "id": "workspace-state",
+      "clientSequence": 2,
+      "ok": true,
+      "method": "workspace.open",
+      "result": {
+        "workspaceId": "workspace-0123",
+        "displayName": "Project",
+        "revision": "revision-0123",
+        "entries": [
+          { "fileId": "main.tex", "directory": false, "sizeBytes": 128, "nativePath": "D:/project/main.tex" }
+        ]
+      }
+    },
+    "accepted": false
+  },
+  {
+    "name": "workspace close response",
+    "type": "WorkspaceClosedResponse",
+    "value": {
+      "version": 2,
+      "id": "workspace-close",
+      "clientSequence": 3,
+      "ok": true,
+      "method": "workspace.close",
+      "result": {}
+    },
+    "accepted": true
+  }
+]

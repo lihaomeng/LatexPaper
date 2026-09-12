@@ -1,0 +1,5 @@
+add_library(lol_document_adapter_localfs STATIC src/klocaldocumentstore.cpp)
+target_include_directories(lol_document_adapter_localfs PUBLIC include)
+target_compile_definitions(lol_document_adapter_localfs PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(lol_document_adapter_localfs PUBLIC lol_document_outbound PRIVATE lol_document_domain bcrypt)
+lol_register(lol_document_adapter_localfs adapter document)

@@ -1,0 +1,4 @@
+add_library(lol_workspace_domain STATIC src/kworkspacedomain.cpp)
+target_include_directories(lol_workspace_domain PUBLIC include)
+target_link_libraries(lol_workspace_domain PRIVATE lol_kernel)
+lol_register(lol_workspace_domain domain workspace)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "LightOverLeaf 开发准则"
+  short_description: "按模块边界、K 风格与安全规则开发 LightOverLeaf"
+  default_prompt: "使用 $lightoverleaf-development 按项目架构、K 风格和验证准则设计或实现这项 LightOverLeaf 变更。"

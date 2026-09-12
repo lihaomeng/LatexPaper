@@ -1,0 +1,9 @@
+add_library(lol_workspaceworkflow_inbound INTERFACE)
+target_include_directories(lol_workspaceworkflow_inbound INTERFACE include)
+target_link_libraries(lol_workspaceworkflow_inbound INTERFACE lol_kernel lol_workspace_inbound lol_document_inbound)
+lol_register(lol_workspaceworkflow_inbound inbound workspaceworkflow)
+
+add_library(lol_workspaceworkflow_app STATIC src/kworkspaceworkflow.cpp)
+target_link_libraries(lol_workspaceworkflow_app PUBLIC lol_workspaceworkflow_inbound
+  PRIVATE lol_workspace_inbound lol_document_inbound)
+lol_register(lol_workspaceworkflow_app workflow workspaceworkflow)

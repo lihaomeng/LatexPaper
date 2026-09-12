@@ -1,0 +1,12 @@
+add_library(lol_system_inbound INTERFACE)
+target_include_directories(lol_system_inbound INTERFACE inbound/include)
+target_link_libraries(lol_system_inbound INTERFACE lol_kernel)
+lol_register(lol_system_inbound inbound system)
+add_library(lol_system_outbound INTERFACE)
+target_include_directories(lol_system_outbound INTERFACE outbound/include)
+target_link_libraries(lol_system_outbound INTERFACE lol_kernel)
+lol_register(lol_system_outbound outbound system)
+add_library(lol_system_app STATIC src/ksystemapplication.cpp)
+target_link_libraries(lol_system_app PRIVATE lol_system_domain lol_system_inbound lol_system_outbound)
+lol_register(lol_system_app app system)
+

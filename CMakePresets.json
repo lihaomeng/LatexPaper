@@ -1,0 +1,96 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "core-debug",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/core-debug",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "desktop-debug",
+      "inherits": "core-debug",
+      "binaryDir": "${sourceDir}/out/desktop-debug",
+      "cacheVariables": {
+        "LIGHTOVERLEAF_BUILD_DESKTOP": "ON"
+      }
+    },
+    {
+      "name": "core-release",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/core-release",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "desktop-release",
+      "inherits": "core-release",
+      "binaryDir": "${sourceDir}/out/desktop-release",
+      "cacheVariables": {
+        "LIGHTOVERLEAF_BUILD_DESKTOP": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "core-debug",
+      "configurePreset": "core-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "core-release",
+      "configurePreset": "core-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "desktop-debug",
+      "configurePreset": "desktop-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "desktop-release",
+      "configurePreset": "desktop-release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "core-debug",
+      "configurePreset": "core-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "core-release",
+      "configurePreset": "core-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "desktop-debug",
+      "configurePreset": "desktop-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "desktop-release",
+      "configurePreset": "desktop-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
+

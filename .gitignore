@@ -1,0 +1,17 @@
+/out/
+/build/
+**/.generated/
+web/node_modules/
+web/dist/
+CMakeUserPresets.json
+*.user
+*.aux
+*.log
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+__pycache__/
+.vs/
+cef-cache/
+/output/playwright/
+/.playwright-cli/

@@ -1,0 +1,4 @@
+add_library(lol_document_domain STATIC src/kdocumentpolicy.cpp)
+target_include_directories(lol_document_domain PUBLIC include)
+target_link_libraries(lol_document_domain PRIVATE lol_kernel)
+lol_register(lol_document_domain domain document)

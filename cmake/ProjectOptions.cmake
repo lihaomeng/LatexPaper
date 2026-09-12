@@ -1,0 +1,13 @@
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+option(LIGHTOVERLEAF_BUILD_DESKTOP "Build the Windows Qt/CEF smoke shell" OFF)
+set(LIGHTOVERLEAF_THIRDPARTY_ROOT "D:/CodeMyself/QTBest/thirdparty_install" CACHE PATH "Native dependency root")
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "Use an out-of-source build: cmake --preset core-debug")
+endif()
+if(MSVC)
+  add_compile_options(/W4 /permissive- /utf-8)
+endif()
+

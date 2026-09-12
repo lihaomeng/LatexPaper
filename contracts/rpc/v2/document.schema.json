@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lightoverleaf:rpc:v2:document",
+  "$defs": {
+    "DocumentOpenRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "method", "params"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "method": { "type": "string", "const": "document.open" },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fileId"],
+          "properties": {
+            "fileId": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 4096 }
+          }
+        }
+      }
+    },
+    "DocumentSaveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "method", "params"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "method": { "type": "string", "const": "document.save" },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fileId", "content", "expectedRevision"],
+          "properties": {
+            "fileId": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 4096 },
+            "content": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 4194304 },
+            "expectedRevision": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" }
+          }
+        }
+      }
+    },
+    "DocumentOpenResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "ok": { "type": "boolean", "const": true },
+        "method": { "type": "string", "const": "document.open" },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fileId", "content", "revision", "utf8Bom"],
+          "properties": {
+            "fileId": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 4096 },
+            "content": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 4194304 },
+            "revision": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+            "utf8Bom": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "DocumentSaveResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "ok": { "type": "boolean", "const": true },
+        "method": { "type": "string", "const": "document.save" },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fileId", "revision"],
+          "properties": {
+            "fileId": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 4096 },
+            "revision": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" }
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/DocumentOpenRequest" },
+    { "$ref": "#/$defs/DocumentSaveRequest" },
+    { "$ref": "#/$defs/DocumentOpenResponse" },
+    { "$ref": "#/$defs/DocumentSaveResponse" }
+  ]
+}

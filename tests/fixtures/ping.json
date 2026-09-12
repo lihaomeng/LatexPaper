@@ -1,0 +1,248 @@
+[
+  {
+    "name": "valid",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": true
+  },
+  {
+    "name": "safe-sequence-limit",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 9007199254740991
+    },
+    "accepted": true
+  },
+  {
+    "name": "version",
+    "request": {
+      "version": 2,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "method",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "document.save",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "extra",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0,
+      "extra": true
+    },
+    "accepted": false
+  },
+  {
+    "name": "params",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {
+        "content": "x"
+      },
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "nullparams",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": null,
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "arrayparams",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": [],
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "booleanversion",
+    "request": {
+      "version": true,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "negative",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": -1
+    },
+    "accepted": false
+  },
+  {
+    "name": "fraction",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0.5
+    },
+    "accepted": false
+  },
+  {
+    "name": "overflow",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 9007199254740992
+    },
+    "accepted": false
+  },
+  {
+    "name": "emptyid",
+    "request": {
+      "version": 1,
+      "id": "",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "longid",
+    "request": {
+      "version": 1,
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "unicodeid",
+    "request": {
+      "version": 1,
+      "id": "测试",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "idnewline",
+    "request": {
+      "version": 1,
+      "id": "ping\n",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "stringsequence",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": "0"
+    },
+    "accepted": false
+  },
+  {
+    "name": "missing-version",
+    "request": {
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "missing-id",
+    "request": {
+      "version": 1,
+      "method": "system.ping",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "missing-method",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "params": {},
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "missing-params",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "clientSequence": 0
+    },
+    "accepted": false
+  },
+  {
+    "name": "missing-clientSequence",
+    "request": {
+      "version": 1,
+      "id": "ping-1",
+      "method": "system.ping",
+      "params": {}
+    },
+    "accepted": false
+  },
+  {
+    "name": "null-root",
+    "request": null,
+    "accepted": false
+  }
+]
+

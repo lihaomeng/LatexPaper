@@ -1,0 +1,7 @@
+add_library(lol_composition STATIC kapplicationcomposition.cpp)
+target_include_directories(lol_composition PUBLIC include)
+target_link_libraries(lol_composition PUBLIC lol_platform_ports
+  PRIVATE lol_system_app lol_workspace_app lol_document_app
+  lol_workspace_adapter_localfs lol_document_adapter_localfs lol_workspaceworkflow_app
+  lol_rpc_core lol_transport_cef lol_platform_worker lol_platform_qt lol_platform_cef lol_platform_windows)
+lol_register(lol_composition composition desktop)
