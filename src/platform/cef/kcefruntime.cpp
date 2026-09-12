@@ -22,6 +22,12 @@ namespace
 {
 constexpr char kAppUrl[] = "https://app.lightoverleaf.local/";
 constexpr char kRpcSmokeUrl[] = "https://app.lightoverleaf.local/#rpc-smoke";
+constexpr char kPayloadSmokeUrl[] = "https://app.lightoverleaf.local/#payload-smoke";
+
+const char* appUrl(bool rpcSmokeTest, bool payloadSmokeTest)
+{
+    return rpcSmokeTest ? kRpcSmokeUrl : payloadSmokeTest ? kPayloadSmokeUrl : kAppUrl;
+}
 
 class KRendererApp final : public CefApp, public CefRenderProcessHandler
 {
@@ -35,7 +41,8 @@ public:
         CefRefPtr<CefV8Context> context) override
     {
         if (m_router && frame->IsMain() &&
-            (frame->GetURL().ToString() == kAppUrl || frame->GetURL().ToString() == kRpcSmokeUrl))
+            (frame->GetURL().ToString() == kAppUrl || frame->GetURL().ToString() == kRpcSmokeUrl ||
+             frame->GetURL().ToString() == kPayloadSmokeUrl))
             m_router->OnContextCreated(browser, frame, context);
     }
     void OnContextReleased(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
@@ -160,9 +167,11 @@ class KBrowserClient final : public CefClient, public CefLifeSpanHandler,
     public CefMessageRouterBrowserSide::Handler
 {
 public:
-    KBrowserClient(KBrowserCallbacks callbacks, KNativeEndpointFactory endpointFactory, bool crashSmokeTest, bool rpcSmokeTest)
+    KBrowserClient(KBrowserCallbacks callbacks, KNativeEndpointFactory endpointFactory,
+        bool crashSmokeTest, bool rpcSmokeTest, bool payloadSmokeTest)
         : m_callbacks(std::move(callbacks)), m_endpointFactory(std::move(endpointFactory)),
-          m_crashSmokeTest(crashSmokeTest), m_rpcSmokeTest(rpcSmokeTest)
+          m_crashSmokeTest(crashSmokeTest), m_rpcSmokeTest(rpcSmokeTest),
+          m_payloadSmokeTest(payloadSmokeTest)
     {
         m_router = CefMessageRouterBrowserSide::Create(CefMessageRouterConfig());
         m_router->AddHandler(this, false);
@@ -171,7 +180,8 @@ public:
     bool OnQuery(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, int64_t queryId,
         const CefString& request, bool persistent, CefRefPtr<CefMessageRouterBrowserSide::Callback> callback) override
     {
-        if (!frame || !frame->IsMain() || frame->GetURL().ToString() != (m_rpcSmokeTest ? kRpcSmokeUrl : kAppUrl) || !m_endpoint)
+        if (!frame || !frame->IsMain() ||
+            frame->GetURL().ToString() != appUrl(m_rpcSmokeTest, m_payloadSmokeTest) || !m_endpoint)
         {
             callback->Failure(1, "REQUEST_DENIED");
             return true;
@@ -238,7 +248,7 @@ public:
     bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
         CefRefPtr<CefRequest> request, bool, bool) override
     {
-        if (request->GetURL().ToString() != (m_rpcSmokeTest ? kRpcSmokeUrl : kAppUrl)) return true;
+        if (request->GetURL().ToString() != appUrl(m_rpcSmokeTest, m_payloadSmokeTest)) return true;
         if (frame->IsMain()) closeEndpoint();
         m_router->OnBeforeBrowse(browser, frame);
         if (frame->IsMain()) openEndpoint();
@@ -298,14 +308,17 @@ private:
     bool m_crashSmokeTest = false;
     bool m_crashInjected = false;
     bool m_rpcSmokeTest = false;
+    bool m_payloadSmokeTest = false;
     IMPLEMENT_REFCOUNTING(KBrowserClient);
 };
 
 class KCefSurface final : public IKBrowserSurface
 {
 public:
-    KCefSurface(KNativeEndpointFactory endpointFactory, bool crashSmokeTest, bool rpcSmokeTest)
-        : m_endpointFactory(std::move(endpointFactory)), m_crashSmokeTest(crashSmokeTest), m_rpcSmokeTest(rpcSmokeTest) {}
+    KCefSurface(KNativeEndpointFactory endpointFactory, bool crashSmokeTest, bool rpcSmokeTest,
+        bool payloadSmokeTest)
+        : m_endpointFactory(std::move(endpointFactory)), m_crashSmokeTest(crashSmokeTest),
+          m_rpcSmokeTest(rpcSmokeTest), m_payloadSmokeTest(payloadSmokeTest) {}
     ~KCefSurface() override
     {
         m_client = nullptr;
@@ -315,11 +328,13 @@ public:
     bool start(std::uintptr_t parent, int width, int height, KBrowserCallbacks callbacks) override
     {
         if (parent == 0 || width <= 0 || height <= 0 || m_client) return false;
-        m_client = new KBrowserClient(std::move(callbacks), m_endpointFactory, m_crashSmokeTest, m_rpcSmokeTest);
+        m_client = new KBrowserClient(std::move(callbacks), m_endpointFactory, m_crashSmokeTest,
+            m_rpcSmokeTest, m_payloadSmokeTest);
         CefWindowInfo window;
         window.SetAsChild(reinterpret_cast<HWND>(parent), CefRect(0, 0, width, height));
         CefBrowserSettings settings;
-        return CefBrowserHost::CreateBrowserSync(window, m_client, m_rpcSmokeTest ? kRpcSmokeUrl : kAppUrl, settings, nullptr, nullptr) != nullptr;
+        return CefBrowserHost::CreateBrowserSync(window, m_client,
+            appUrl(m_rpcSmokeTest, m_payloadSmokeTest), settings, nullptr, nullptr) != nullptr;
     }
     void resize(int width, int height) override
     {
@@ -343,6 +358,7 @@ private:
     KNativeEndpointFactory m_endpointFactory;
     bool m_crashSmokeTest = false;
     bool m_rpcSmokeTest = false;
+    bool m_payloadSmokeTest = false;
 };
 }
 int executeCefProcess(std::uintptr_t instance, void* sandbox)
@@ -352,7 +368,8 @@ int executeCefProcess(std::uintptr_t instance, void* sandbox)
 }
 std::unique_ptr<IKBrowserSurface> createCefSurface(std::uintptr_t instance, void* sandbox,
     const std::string& cachePath, const std::string& resourcePath,
-    KNativeEndpointFactory endpointFactory, bool crashSmokeTest, bool rpcSmokeTest)
+    KNativeEndpointFactory endpointFactory, bool crashSmokeTest, bool rpcSmokeTest,
+    bool payloadSmokeTest)
 {
     if (instance == 0 || cachePath.empty() || resourcePath.empty()) return nullptr;
     std::error_code error;
@@ -369,6 +386,7 @@ std::unique_ptr<IKBrowserSurface> createCefSurface(std::uintptr_t instance, void
         CefShutdown();
         return nullptr;
     }
-    return std::make_unique<KCefSurface>(std::move(endpointFactory), crashSmokeTest, rpcSmokeTest);
+    return std::make_unique<KCefSurface>(std::move(endpointFactory), crashSmokeTest, rpcSmokeTest,
+        payloadSmokeTest);
 }
 }

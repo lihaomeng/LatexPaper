@@ -41,6 +41,19 @@ public:
             if (document.m_fileId.empty() || document.m_fileId.size() > 4096 ||
                 !validSearchDocumentText(document.m_fileId) || !validSearchDocumentText(document.m_content))
                 return KError{KErrorCode::Internal, "search.sourceFailure", false};
+            const std::string comparableFileId = command.m_caseSensitive ?
+                document.m_fileId : folded(document.m_fileId);
+            const std::size_t filePosition = comparableFileId.find(needle);
+            if (filePosition != std::string::npos)
+            {
+                if (result.m_hits.size() == command.m_maxResults)
+                {
+                    result.m_truncated = true;
+                    return result;
+                }
+                result.m_hits.push_back({document.m_fileId, 1, filePosition + 1,
+                    "[文件名] " + document.m_fileId});
+            }
             std::size_t lineNumber = 1;
             for (std::size_t start = 0; start <= document.m_content.size();)
             {

@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { monaco } from "./monaco";
 import { EditorSession } from "./EditorSession";
-export interface EditorCommands { run(command: "undo" | "redo" | "find" | "bold" | "italic"): void; reveal(line: number): void }
+export interface EditorCommands { run(command: "undo" | "redo" | "find" | "bold" | "italic"): void; reveal(line: number, column?: number): void }
 export const EditorSurface = forwardRef<EditorCommands, { session: EditorSession; wrap: boolean; readOnly?: boolean; onReady(): void }>(
   function EditorSurface({ session, wrap, readOnly = false, onReady }, ref) {
     const host = useRef<HTMLDivElement>(null);
@@ -21,8 +21,8 @@ export const EditorSurface = forwardRef<EditorCommands, { session: EditorSession
           editor.pushUndoStop();
         } else editor.trigger("toolbar", command === "find" ? "actions.find" : command, null);
       },
-      reveal(line) {
-        instance.current?.setPosition({ lineNumber: line, column: 1 });
+      reveal(line, column = 1) {
+        instance.current?.setPosition({ lineNumber: line, column });
         instance.current?.revealLineInCenter(line);
         instance.current?.focus();
       },

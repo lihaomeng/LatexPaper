@@ -17,6 +17,8 @@ test('authoring RPC keeps search, detection, build and cancellation contracts se
       : request.method === 'build.start' ? { jobId: request.params.jobId, terminal: 'succeeded',
         exitCode: 0, output: '', outputTruncated: false, diagnostics: [],
         artifactId: 'artifact-1', syncTexAvailable: true }
+      : request.method === 'build.status' ? { jobId: request.params.jobId, state: 'running',
+        output: 'partial', outputTruncated: false }
       : { accepted: true };
     success(JSON.stringify({ ...base, result })); return () => {};
   } };
@@ -24,8 +26,9 @@ test('authoring RPC keeps search, detection, build and cancellation contracts se
   assert.equal((await client.search('中文')).hits[0].line, 2);
   assert.equal((await client.detect()).toolchains[0].engines[0], 'xelatex');
   assert.equal((await client.build('job-1', 'snapshot-1', 'main.tex', 'xelatex', 3000)).terminal, 'succeeded');
+  assert.equal((await client.status('job-1')).output, 'partial');
   assert.equal(await client.cancel('job-1'), true);
-  assert.deepEqual(methods, ['search.start', 'build.detect', 'build.start', 'build.cancel']);
+  assert.deepEqual(methods, ['search.start', 'build.detect', 'build.start', 'build.status', 'build.cancel']);
 });
 
 test('authoring downloads bounded PDF chunks and maps navigation', async () => {

@@ -1,12 +1,12 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AuthoringRpcClient, createNativeConnection, createSystemConnection, createStartupEvents,
-  PreferencesSessionRpcClient, WorkspaceRpcClient, type Preferences } from "../native-api";
+  payloadSmokeProbe, PreferencesSessionRpcClient, WorkspaceRpcClient, type Preferences } from "../native-api";
 import type { SessionSnapshot } from "../native-api";
 import type { WorkspaceStateResponseResult, WorkspaceTrashListResponseResultEntriesItem } from "../../.generated/rpc/protocol";
 import { EditorSession, EditorSurface, type EditorCommands } from "../features/editor";
 import { Explorer } from "../features/explorer";
-import { PreviewPanel, type BuildView } from "../features/preview";
+import { PreviewPanel, type BuildView, type PdfTarget } from "../features/preview";
 import { validDraftPath } from "../features/session";
 import { Icon, type IconName } from "../shared/Icon";
 import { Splitter } from "../shared/Splitter";
@@ -17,6 +17,7 @@ import { saveConflictCopy } from "./saveConflictCopy";
 import { reconcileWorkspaceRefresh } from "./refreshLocalWorkspace";
 import { containsMergeMarkers, mergeDocumentText } from "./threeWayMerge";
 import { validWorkspaceDirectoryId } from "./workspacePaths";
+import { newProjectMain } from "./starter";
 import "./style.css";
 
 const connection = createNativeConnection(import.meta.env.DEV);
@@ -76,6 +77,8 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
   const restoredSession = useRef<SessionSnapshot | null>(null);
   const activeBuildJob = useRef<string | null>(null);
   const buildSequence = useRef(0);
+  const lastAutoCompileRevision = useRef(0);
+  const [pdfTarget, setPdfTarget] = useState<PdfTarget | null>(null);
   const session = localSession ?? draftSession;
   const view = useSyncExternalStore(session.subscribe, session.getView);
   const editor = useRef<EditorCommands>(null);
@@ -86,6 +89,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
   const [wrap, setWrap] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(252);
   const [editorWidth, setEditorWidth] = useState(Math.max(380, window.innerWidth * .43));
+  const [previewZoom, setPreviewZoom] = useState(125);
   const [filter, setFilter] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [modal, setModal] = useState<"new" | "help" | "settings" | "conflict" | "manage" | "directory" | "trash" | null>(null);
@@ -196,7 +200,10 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       connectionFailed = true;
       if (active) setNative("error");
     }, window.location.hash === "#rpc-smoke");
-    events.ready.then(() => connection.api.ping({ version: 1, id: "workbench-startup", method: "system.ping", params: {}, clientSequence: 0 }))
+    events.ready.then(async () => {
+      if (window.location.hash === "#payload-smoke") await payloadSmokeProbe(workspaceConnection);
+      return connection.api.ping({ version: 1, id: "workbench-startup", method: "system.ping", params: {}, clientSequence: 0 });
+    })
       .then(() => systemConnection.ping())
       .then(() => systemConnection.getCapabilities())
       .then(capabilities => { if (active && !connectionFailed) { setNativeFiles(capabilities.nativeFiles); setNative("ready"); } })
@@ -218,7 +225,9 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       if (savedSession.found) {
         restoredSession.current = savedSession.state;
         setSidebarWidth(savedSession.state.sidebarWidth);
+        setEditorWidth(savedSession.state.editorWidth);
         setPreview(savedSession.state.previewOpen);
+        setPreviewZoom(savedSession.state.previewZoom);
       }
     }).catch(failure => {
       if (active) setSettingsError("读取设置或会话失败：" + (failure as Error).message);
@@ -233,14 +242,19 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         openFiles: localSession ? view.open : [],
         activeFile: localSession ? view.active ?? "" : "",
         sidebarWidth,
+        editorWidth: Math.round(editorWidth),
         previewOpen: preview,
+        activeLine: localSession ? view.line : 1,
+        activeColumn: localSession ? view.column : 1,
+        previewZoom,
       }).then(() => {
         if (project?.workspaceId)
           setRecentWorkspaces(current => [project.workspaceId, ...current.filter(item => item !== project.workspaceId)].slice(0, 20));
       }).catch(failure => setSettingsError("保存会话失败：" + (failure as Error).message));
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [native, project?.workspaceId, localSession, view.open, view.active, sidebarWidth, preview]);
+  }, [native, project?.workspaceId, localSession, view.open, view.active, view.line, view.column,
+    sidebarWidth, editorWidth, preview, previewZoom]);
   useEffect(() => {
     if (native === "ready" && editorReady && activeStatus === "saved") document.title = "LightOverLeaf · Native Ready";
     else if (native === "error") document.title = "LightOverLeaf · Native Error";
@@ -404,7 +418,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         '恢复失败：' + code);
     } finally { mutationBusy.current = false; setWorkspaceBusy(false); }
   };
-  const openWorkspace = async () => {
+  const openWorkspace = async (createProject = false) => {
     if (!nativeFiles || workspaceBusy || refreshInFlight.current) return;
     ++refreshSequence.current;
     if (localSession && (conflictRef.current || saveInFlight.current || localSession.getView().files.some(file => file.dirty))) {
@@ -415,8 +429,17 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
     setWorkspaceBusy(true); setLocalError("");
     let openedWorkspace = false;
     try {
-      const openedProject = await workspaceConnection.open();
+      let openedProject = await workspaceConnection.open();
       openedWorkspace = true;
+      if (createProject) {
+        if (openedProject.entries.length) {
+          await workspaceConnection.close();
+          openedWorkspace = false;
+          throw new Error("PROJECT_DIRECTORY_NOT_EMPTY");
+        }
+        await workspaceConnection.saveDocumentAs("main.tex", newProjectMain, false);
+        openedProject = await workspaceConnection.refresh();
+      }
       const candidates = openedProject.entries.filter(entry => !entry.directory && /\.(tex|bib|md|txt)$/i.test(entry.fileId));
       const first = candidates.find(entry => entry.fileId.toLowerCase() === "main.tex") ?? candidates[0];
       const next = new EditorSession({ files: [], open: [], active: null });
@@ -431,14 +454,18 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         nextRevisions.set(document.fileId, document.revision);
       }
       if (previous?.activeFile && next.model(previous.activeFile)) next.activate(previous.activeFile);
+      if (previous?.activeFile && next.model(previous.activeFile))
+        window.setTimeout(() => editor.current?.reveal(previous.activeLine, previous.activeColumn));
       restoredSession.current = null;
       localSessionRef.current?.dispose();
       localSessionRef.current = next;
+      lastAutoCompileRevision.current = next.getView().revision;
       revisions.current = nextRevisions;
       refreshDeferred.current = false;
       setProject(openedProject); setLocalSession(next); setLocalStatus("saved");
       setSearchHits([]); setProjectQuery(""); setSearchError("");
       setBuildView({ state: "idle", output: "", diagnostics: [] });
+      setPdfTarget(null);
       setSelectedDirectory(null); setOutlineLine(null);
     } catch (failure) {
       const code = (failure as Error).message;
@@ -447,7 +474,8 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         localSessionRef.current?.dispose(); localSessionRef.current = null;
         setLocalSession(null); setProject(null); setSelectedDirectory(null); revisions.current.clear();
       }
-      if (code !== "USER_CANCELLED") setLocalError("打开本地项目失败：" + code);
+      if (code !== "USER_CANCELLED") setLocalError(code === "PROJECT_DIRECTORY_NOT_EMPTY" ?
+        "新建项目需要选择一个空目录；未修改所选目录。" : "打开本地项目失败：" + code);
     } finally { setWorkspaceBusy(false); }
   };
   const openLocalFile = async (path: string) => {
@@ -493,6 +521,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       (view.active?.toLowerCase().endsWith(".tex") ? view.active : undefined);
     if (!mainFileId) { setBuildView({ state: "failed", output: "", diagnostics: [] }); setLocalError("未找到 main.tex 或当前 .tex 主文件。"); return; }
     const sequence = ++buildSequence.current;
+    let logTimer: number | undefined;
     try {
       if (localSession.getView().files.some(file => file.dirty)) {
         saveInFlight.current = true; setLocalStatus("saving");
@@ -502,6 +531,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         setLocalStatus("saved");
       }
       setBuildView({ state: "detecting", output: "", diagnostics: [] });
+      setPdfTarget(null);
       const detected = await authoringConnection.detect();
       if (localSessionRef.current !== localSession || sequence !== buildSequence.current) return;
       const engine = detected.toolchains.flatMap(item => item.engines)
@@ -511,6 +541,14 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       const jobId = "job-" + token;
       activeBuildJob.current = jobId;
       setBuildView({ state: "running", output: "", diagnostics: [] });
+      logTimer = window.setInterval(() => {
+        void authoringConnection.status(jobId).then(status => {
+          if (localSessionRef.current !== localSession || sequence !== buildSequence.current ||
+              status.state !== "running") return;
+          setBuildView(current => ({ ...current, state: "running",
+            output: status.output + (status.outputTruncated ? "\n[日志已截断]" : "") }));
+        }).catch(() => {});
+      }, 200);
       const result = await authoringConnection.build(jobId, "snapshot-" + token, mainFileId, engine, preferences.timeoutMs);
       if (localSessionRef.current !== localSession || sequence !== buildSequence.current) return;
       const state: BuildView["state"] = result.terminal === "compilerUnavailable" ? "unavailable" : result.terminal;
@@ -523,8 +561,31 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         setBuildView({ state: (failure as Error).message === "RPC_CANCELLED" ? "cancelled" : "failed",
           output: (failure as Error).message, diagnostics: [] });
     } finally {
+      if (logTimer !== undefined) window.clearInterval(logTimer);
       saveInFlight.current = false;
       if (sequence === buildSequence.current) activeBuildJob.current = null;
+    }
+  };
+  useEffect(() => {
+    if (!preferences.autoCompile || !localSession || !project || activeStatus !== "saved" ||
+        activeBuildJob.current || conflictRef.current || view.revision <= lastAutoCompileRevision.current) return;
+    const revision = view.revision;
+    const timer = window.setTimeout(() => {
+      if (localSessionRef.current !== localSession || localSession.getView().revision !== revision) return;
+      lastAutoCompileRevision.current = revision;
+      void compileProject();
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [activeStatus, localSession, preferences.autoCompile, project, view.revision]);
+  const forwardSync = async () => {
+    if (!buildView.artifactId || !buildView.syncTexAvailable || !view.active) return;
+    try {
+      const location = await authoringConnection.forward(buildView.artifactId, view.active, view.line, view.column);
+      setPreview(true);
+      setPdfTarget({ ...location, revision: Date.now() });
+      setLocalError("");
+    } catch (failure) {
+      setLocalError("SyncTeX 正向定位失败：" + (failure as Error).message);
     }
   };
   const cancelBuild = async () => {
@@ -669,6 +730,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       <nav className="main-menu" aria-label="主菜单">
         <button onClick={() => void openWorkspace()} disabled={!nativeFiles || workspaceBusy}>
           {workspaceBusy ? "正在打开…" : "打开项目"}</button>
+        <button onClick={() => void openWorkspace(true)} disabled={!nativeFiles || workspaceBusy}>新建项目</button>
         <button onClick={() => void refreshWorkspace()} disabled={!localSession || workspaceBusy}>刷新</button>
         <button onClick={newFile} disabled={workspaceBusy}>新建</button>
         {localSession && <button onClick={startDirectoryOperation} disabled={workspaceBusy}>目录</button>}
@@ -742,6 +804,8 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
           <button className="text-tool" title="插入斜体命令" aria-label="插入斜体" disabled={!view.active} onClick={() => editor.current?.run("italic")}><i>I</i></button>
           <Tool icon="wrap" label="自动换行" pressed={wrap} onClick={() => setWrap(!wrap)} />
           <div className="toolbar-spacer" /><span className="code-pill"><Icon name="code" size={13} />源码</span>
+          <Tool icon="pdf" label="定位到 PDF" disabled={!buildView.artifactId || !buildView.syncTexAvailable || !view.active}
+            onClick={() => void forwardSync()} />
           <Tool icon="search" label="查找当前文档 (Ctrl+F)" disabled={!view.active} onClick={() => editor.current?.run("find")} />
         </div>
         <div className="editor-breadcrumb"><span>{project?.displayName ?? "草稿"}</span><span> / </span><span>{view.active ?? "未打开文件"}</span></div>
@@ -754,6 +818,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       {preview && <><Splitter label="调整编辑器宽度" min={300} max={Math.max(400, window.innerWidth - 400)} value={editorWidth} onChange={setEditorWidth} />
         <PreviewPanel build={buildView} canCompile={Boolean(localSession && project && view.active)}
           onCompile={() => void compileProject()} onCancel={() => void cancelBuild()}
+          target={pdfTarget} zoom={previewZoom} onZoomChange={setPreviewZoom}
           onReverse={(page, x, y) => { if (buildView.artifactId) void authoringConnection.reverse(buildView.artifactId, page, x, y)
             .then(location => openSearchHit(location.fileId, location.line))
             .catch(failure => setLocalError("SyncTeX 反向定位失败：" + (failure as Error).message)); }}
@@ -783,7 +848,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
             disabled={settingsBusy} onChange={event => setPreferencesDraft(current => ({ ...current,
               timeoutMs: Number(event.target.value) }))} />
           <label><input type="checkbox" checked={preferencesDraft.autoCompile} disabled={settingsBusy}
-            onChange={event => setPreferencesDraft(current => ({ ...current, autoCompile: event.target.checked }))} /> 自动编译（保留偏好；当前版本仍由用户手动触发）</label>
+            onChange={event => setPreferencesDraft(current => ({ ...current, autoCompile: event.target.checked }))} /> 保存后自动编译</label>
           <p>布局、打开标签与最近项目由本机 SQLite 保存。重新选择同一项目后恢复标签；不会把绝对 PDF 路径交给前端。</p>
           <div className="recent-workspaces"><b>最近项目</b>
             {recentWorkspaces.map(root => <code key={root}>{root}</code>)}
@@ -880,7 +945,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
           <div className="shortcut"><span>查找当前文档</span><kbd>Ctrl + F</kbd></div>
           <div className="shortcut"><span>撤销 / 重做</span><kbd>Ctrl + Z / Y</kbd></div>
           <p className="muted">缓存只属于当前应用配置。清除应用缓存会丢失草稿；异常退出可能丢失尚未缓存的最后输入。关闭标签不会删除文件。</p>
-          <p className="muted">已支持本地项目、文件/目录管理、冲突恢复、搜索、可插拔 TeX 编译、PDF.js 预览和本机会话设置。磁盘变化不会覆盖并发编辑，删除内容保存在项目内 .lightoverleaf-trash。真实 SyncTeX 仍需额外 Backend；未检测到 TeX 时不会模拟编译成功。</p>
+          <p className="muted">已支持本地项目、文件/目录管理、冲突恢复、搜索、可插拔 TeX 编译、PDF.js 预览和本机会话设置。磁盘变化不会覆盖并发编辑，删除内容保存在项目内 .lightoverleaf-trash。双向 SyncTeX 需要本机工具链提供 synctex.exe；未检测到 TeX 时不会模拟编译成功。</p>
           <div className="modal-actions"><button className="primary" onClick={() => setModal(null)}>开始写作</button></div>
         </>}
       </section>

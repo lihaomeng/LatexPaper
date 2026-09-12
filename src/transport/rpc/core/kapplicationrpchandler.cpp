@@ -95,6 +95,20 @@ const char* buildTerminal(build::KBuildTerminal terminal)
     return "failed";
 }
 
+const char* buildState(build::KBuildState state)
+{
+    switch (state)
+    {
+    case build::KBuildState::Running: return "running";
+    case build::KBuildState::Succeeded: return "succeeded";
+    case build::KBuildState::Cancelled: return "cancelled";
+    case build::KBuildState::TimedOut: return "timedOut";
+    case build::KBuildState::CompilerUnavailable: return "compilerUnavailable";
+    case build::KBuildState::Failed: return "failed";
+    }
+    return "failed";
+}
+
 const char* diagnosticSeverity(build::KDiagnosticSeverity severity)
 {
     return severity == build::KDiagnosticSeverity::Info ? "info" :
@@ -381,6 +395,25 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
             {"syncTexAvailable", KValue{value.m_syncTexAvailable}}}});
         return KValue{std::move(response)};
     }
+    if (method == "build.status")
+    {
+        if (!v2::validateBuildStatusRequest(request)) return failure(*object, "INVALID_ARGUMENT");
+        const auto& params = std::get<KValue::KObject>(object->at("params").m_value);
+        KResult<build::KBuildStatus> result = m_workflow->buildStatus(
+            std::get<std::string>(params.at("jobId").m_value));
+        if (const KError* error = std::get_if<KError>(&result))
+            return failure(*object, errorCode(*error));
+        build::KBuildStatus value = std::get<build::KBuildStatus>(std::move(result));
+        KValue::KObject response = responseBase(*object);
+        response.emplace("ok", KValue{true});
+        response.emplace("method", KValue{method});
+        response.emplace("result", KValue{KValue::KObject{
+            {"jobId", KValue{std::move(value.m_jobId)}},
+            {"state", KValue{std::string(buildState(value.m_state))}},
+            {"output", KValue{std::move(value.m_output)}},
+            {"outputTruncated", KValue{value.m_outputTruncated}}}});
+        return KValue{std::move(response)};
+    }
     if (method == "build.cancel")
     {
         if (!v2::validateBuildCancelRequest(request)) return failure(*object, "INVALID_ARGUMENT");
@@ -504,7 +537,11 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
                 {"openFiles", KValue{std::move(openFiles)}},
                 {"activeFile", KValue{std::move(value.m_activeFile)}},
                 {"sidebarWidth", KValue{static_cast<double>(value.m_sidebarWidth)}},
-                {"previewOpen", KValue{value.m_previewOpen}}}}}}});
+                {"editorWidth", KValue{static_cast<double>(value.m_editorWidth)}},
+                {"previewOpen", KValue{value.m_previewOpen}},
+                {"activeLine", KValue{static_cast<double>(value.m_activeLine)}},
+                {"activeColumn", KValue{static_cast<double>(value.m_activeColumn)}},
+                {"previewZoom", KValue{static_cast<double>(value.m_previewZoom)}}}}}}});
         return KValue{std::move(response)};
     }
     if (method == "session.save")
@@ -520,7 +557,15 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
         state.m_activeFile = std::get<std::string>(params.at("activeFile").m_value);
         state.m_sidebarWidth = static_cast<unsigned int>(
             std::get<double>(params.at("sidebarWidth").m_value));
+        state.m_editorWidth = static_cast<unsigned int>(
+            std::get<double>(params.at("editorWidth").m_value));
         state.m_previewOpen = std::get<bool>(params.at("previewOpen").m_value);
+        state.m_activeLine = static_cast<std::size_t>(
+            std::get<double>(params.at("activeLine").m_value));
+        state.m_activeColumn = static_cast<std::size_t>(
+            std::get<double>(params.at("activeColumn").m_value));
+        state.m_previewZoom = static_cast<unsigned int>(
+            std::get<double>(params.at("previewZoom").m_value));
         KResult<bool> result = m_sessions->save(state);
         if (const KError* error = std::get_if<KError>(&result))
             return failure(*object, errorCode(*error));

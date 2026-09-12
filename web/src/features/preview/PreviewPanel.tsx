@@ -11,10 +11,15 @@ export interface BuildView {
   pdf?: Uint8Array;
   syncTexAvailable?: boolean;
 }
-export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnostic, onReverse }: {
+export interface PdfTarget { page: number; x: number; y: number; revision: number }
+export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnostic, onReverse, target,
+  zoom = 125, onZoomChange }: {
   build: BuildView; canCompile: boolean; onCompile(): void; onCancel(): void;
   onDiagnostic(fileId: string, line: number): void;
   onReverse?(page: number, x: number, y: number): void;
+  target?: PdfTarget | null;
+  zoom?: number;
+  onZoomChange?(zoom: number): void;
 }) {
   const [tab, setTab] = useState<"preview" | "log">("preview");
   const running = build.state === "detecting" || build.state === "running";
@@ -34,7 +39,8 @@ export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnos
       </div>
     </div>
     {tab === "preview" ? <div className="preview-stage">
-      {build.pdf ? <PdfCanvas data={build.pdf} onReverse={build.syncTexAvailable ? onReverse : undefined} /> : <div className="preview-empty">
+      {build.pdf ? <PdfCanvas data={build.pdf} onReverse={build.syncTexAvailable ? onReverse : undefined}
+        target={target} zoom={zoom} onZoomChange={onZoomChange} /> : <div className="preview-empty">
         <div className="paper-icon"><Icon name="pdf" size={34} /></div>
         <span className="small-label">PDF PREVIEW</span>
         <h2>让想法，成为文档。</h2>
@@ -51,10 +57,19 @@ export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnos
   </section>;
 }
 
-function PdfCanvas({ data, onReverse }: { data: Uint8Array; onReverse?: (page: number, x: number, y: number) => void }) {
+function PdfCanvas({ data, onReverse, target, zoom, onZoomChange }: {
+  data: Uint8Array;
+  onReverse?: (page: number, x: number, y: number) => void;
+  target?: PdfTarget | null;
+  zoom: number;
+  onZoomChange?(zoom: number): void;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const marker = useRef<HTMLSpanElement>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = useState(1);
+  const scale = zoom / 100;
+  const [rendered, setRendered] = useState(0);
   const [error, setError] = useState("");
   useEffect(() => {
     const task = getDocument({ data: data.slice() }); let active = true;
@@ -63,25 +78,38 @@ function PdfCanvas({ data, onReverse }: { data: Uint8Array; onReverse?: (page: n
     return () => { active = false; void task.destroy(); };
   }, [data]);
   useEffect(() => {
+    if (target && document) setPage(Math.min(document.numPages, Math.max(1, target.page)));
+  }, [document, target]);
+  useEffect(() => {
     if (!document || !canvas.current) return;
     let cancelled = false; let render: { cancel(): void; promise: Promise<void> } | undefined;
     void document.getPage(page).then(pdfPage => {
       if (cancelled || !canvas.current) return;
-      const viewport = pdfPage.getViewport({ scale: 1.25 });
+      const viewport = pdfPage.getViewport({ scale });
       const context = canvas.current.getContext("2d"); if (!context) return;
       canvas.current.width = viewport.width; canvas.current.height = viewport.height;
       render = pdfPage.render({ canvas: canvas.current, canvasContext: context, viewport });
-      return render.promise;
+      return render.promise.then(() => { if (!cancelled) setRendered(value => value + 1); });
     }).catch(failure => { if (!cancelled && (failure as Error).name !== "RenderingCancelledException") setError((failure as Error).message); });
     return () => { cancelled = true; render?.cancel(); };
-  }, [document, page]);
+  }, [document, page, scale]);
+  useEffect(() => {
+    if (target?.page === page) marker.current?.scrollIntoView({ block: "center", inline: "center" });
+  }, [page, rendered, scale, target]);
   if (error) return <div className="preview-empty"><p role="alert">PDF.js 无法显示此产物：{error}</p></div>;
   return <div className="pdf-viewer"><div className="pdf-controls">
     <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}>上一页</button>
     <span>{page} / {document?.numPages ?? "—"}</span>
     <button disabled={!document || page >= document.numPages} onClick={() => setPage(value => value + 1)}>下一页</button>
-  </div><div className="pdf-scroll"><canvas ref={canvas} aria-label={"PDF 第 " + page + " 页"}
+    <span className="zoom-controls"><button disabled={zoom <= 50} onClick={() => onZoomChange?.(Math.max(50, zoom - 25))}>−</button>
+      <button title="恢复 100%" onClick={() => onZoomChange?.(100)}>{zoom}%</button>
+      <button disabled={zoom >= 300} onClick={() => onZoomChange?.(Math.min(300, zoom + 25))}>＋</button></span>
+  </div><div className="pdf-scroll"><div className="pdf-page"><canvas ref={canvas} aria-label={"PDF 第 " + page + " 页"}
     title={onReverse ? "双击跳转到源码" : undefined}
     onDoubleClick={event => { const rect = event.currentTarget.getBoundingClientRect();
-      onReverse?.(page, event.clientX - rect.left, event.clientY - rect.top); }} /></div></div>;
+      const ratioX = rect.width > 0 ? event.currentTarget.width / rect.width / scale : 1;
+      const ratioY = rect.height > 0 ? event.currentTarget.height / rect.height / scale : 1;
+      onReverse?.(page, (event.clientX - rect.left) * ratioX, (event.clientY - rect.top) * ratioY); }} />
+    {target?.page === page && <span ref={marker} className="synctex-marker" aria-label="源码定位位置"
+      style={{ left: target.x * scale, top: target.y * scale }} />}</div></div></div>;
 }

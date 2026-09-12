@@ -13,7 +13,15 @@ int main(){int failures=0;auto check=[&](bool v,const char*m){if(!v){++failures;
   auto saved=app->update({"D:/TeX","lualatex",45000,true});check(std::holds_alternative<preferences::KPreferences>(saved),"preferences save");}
  auto ss=session::createSqliteSessionStore(utf8);check(std::holds_alternative<std::shared_ptr<session::IKSessionStore>>(ss),"session sqlite");
  if(auto*s=std::get_if<std::shared_ptr<session::IKSessionStore>>(&ss)){auto app=session::createSessions(*s);check(std::holds_alternative<std::optional<session::KSessionState>>(app->restore()),"empty restore");
-  check(std::holds_alternative<bool>(app->save({"D:/项目",{"main.tex","章节/一.tex"},"章节/一.tex",310,true})),"session save");
-  auto restored=app->restore();check(std::holds_alternative<std::optional<session::KSessionState>>(restored)&&std::get<std::optional<session::KSessionState>>(restored)->m_openFiles.size()==2,"session restore");
+  session::KSessionState state;state.m_workspaceRoot="D:/项目";state.m_openFiles={"main.tex","章节/一.tex"};
+  state.m_activeFile="章节/一.tex";state.m_sidebarWidth=310;state.m_editorWidth=840;state.m_previewOpen=true;
+  state.m_activeLine=27;state.m_activeColumn=9;state.m_previewZoom=150;
+  check(std::holds_alternative<bool>(app->save(state)),"session save");
+  auto restored=app->restore();check(std::holds_alternative<std::optional<session::KSessionState>>(restored)&&
+   std::get<std::optional<session::KSessionState>>(restored)->m_openFiles.size()==2&&
+   std::get<std::optional<session::KSessionState>>(restored)->m_editorWidth==840&&
+   std::get<std::optional<session::KSessionState>>(restored)->m_activeLine==27&&
+   std::get<std::optional<session::KSessionState>>(restored)->m_activeColumn==9&&
+   std::get<std::optional<session::KSessionState>>(restored)->m_previewZoom==150,"session restore");
   auto history=app->history();check(std::holds_alternative<std::vector<std::string>>(history)&&std::get<std::vector<std::string>>(history).size()==1,"history");}
  fs::remove(db,e);return failures?1:0;}

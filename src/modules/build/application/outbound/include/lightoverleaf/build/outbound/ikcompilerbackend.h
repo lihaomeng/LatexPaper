@@ -1,7 +1,9 @@
 #pragma once
 #include <lightoverleaf/kernel/kresult.h>
 #include <stop_token>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <cstdint>
 #include <vector>
 
@@ -30,6 +32,7 @@ struct KCompilerRun
     std::string m_mainFileId;
     KCompilerEngine m_engine = KCompilerEngine::XeLatex;
     unsigned int m_timeoutMs = 120000;
+    std::function<void(std::string_view, bool)> m_onOutput;
 };
 struct KCompilerRunResult
 {

@@ -33,6 +33,11 @@ int main()
     KResult<KSearchResult> unicode = search->run({"搜索", true, 10});
     check(std::holds_alternative<KSearchResult>(unicode) &&
         std::get<KSearchResult>(unicode).m_hits.front().m_line == 2, "unicode search");
+    KResult<KSearchResult> filename = search->run({"refs", false, 10});
+    check(std::holds_alternative<KSearchResult>(filename) &&
+        std::get<KSearchResult>(filename).m_hits.size() == 1 &&
+        std::get<KSearchResult>(filename).m_hits.front().m_preview == "[文件名] refs.bib",
+        "filename search");
     KResult<KSearchResult> bounded = search->run({"alpha", false, 2});
     check(std::holds_alternative<KSearchResult>(bounded) && std::get<KSearchResult>(bounded).m_truncated &&
         std::get<KSearchResult>(bounded).m_hits.size() == 2, "bounded search results");

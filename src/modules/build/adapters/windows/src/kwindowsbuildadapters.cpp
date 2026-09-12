@@ -56,10 +56,10 @@ KResult<std::vector<std::uint8_t>> readBoundedFile(const fs::path& path, std::si
     if (!input) return KError{KErrorCode::Unavailable, "build.artifactReadFailure", true};
     return bytes;
 }
-std::string safeUtf8(const std::string& value)
+std::string safeUtf8(const std::string& value, bool& truncated)
 {
     std::string result;
-    result.reserve(value.size());
+    result.reserve(std::min(value.size(), kMaxBuildLogBytes));
     for (std::size_t index = 0; index < value.size();)
     {
         const unsigned char first = static_cast<unsigned char>(value[index]);
@@ -76,6 +76,12 @@ std::string safeUtf8(const std::string& value)
             const unsigned char second = static_cast<unsigned char>(value[index + 1]);
             if ((first == 0xe0 && second < 0xa0) || (first == 0xed && second > 0x9f) ||
                 (first == 0xf0 && second < 0x90) || (first == 0xf4 && second > 0x8f)) valid = false;
+        }
+        const std::size_t encodedSize = valid ? count : 3;
+        if (encodedSize > kMaxBuildLogBytes - result.size())
+        {
+            truncated = true;
+            break;
         }
         if (valid) { result.append(value, index, count); index += count; }
         else { result.append("\xef\xbf\xbd"); ++index; }
@@ -110,9 +116,9 @@ std::wstring quote(const std::wstring& value)
     result.push_back(L'\"');
     return result;
 }
-std::optional<fs::path> findExecutable(const std::vector<fs::path>& roots, KCompilerEngine engine)
+std::optional<fs::path> findNamedExecutable(const std::vector<fs::path>& roots,
+    const std::wstring& name)
 {
-    const std::wstring name = engineName(engine);
     for (const fs::path& root : roots)
     {
         for (const fs::path& candidate : {root / name, root / L"bin" / L"windows" / name,
@@ -131,7 +137,13 @@ std::optional<fs::path> findExecutable(const std::vector<fs::path>& roots, KComp
     buffer.resize(written);
     return fs::path(buffer);
 }
-void appendPipe(HANDLE pipe, std::string& output, bool& truncated)
+std::optional<fs::path> findExecutable(const std::vector<fs::path>& roots,
+    KCompilerEngine engine)
+{
+    return findNamedExecutable(roots, engineName(engine));
+}
+void appendPipe(HANDLE pipe, std::string& output, bool& truncated,
+    const std::function<void(std::string_view, bool)>& onOutput)
 {
     for (;;)
     {
@@ -143,9 +155,35 @@ void appendPipe(HANDLE pipe, std::string& output, bool& truncated)
         const std::size_t remaining = kMaxBuildLogBytes - output.size();
         output.append(buffer, std::min<std::size_t>(read, remaining));
         if (read > remaining) truncated = true;
+        if (onOutput)
+        {
+            bool conversionTruncated = false;
+            const std::string safe = safeUtf8(output, conversionTruncated);
+            onOutput(safe, truncated || conversionTruncated);
+        }
     }
 }
-std::vector<KCompilerDiagnostic> diagnostics(const std::string& output)
+KCompilerDiagnosticSeverity severity(const std::string& message)
+{
+    const std::string lowered = [&]
+    {
+        std::string value = message;
+        std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char byte)
+        {
+            return byte >= 'A' && byte <= 'Z' ? static_cast<char>(byte - 'A' + 'a') :
+                static_cast<char>(byte);
+        });
+        return value;
+    }();
+    if (lowered.find("warning") != std::string::npos)
+        return KCompilerDiagnosticSeverity::Warning;
+    if (lowered.find("info") != std::string::npos)
+        return KCompilerDiagnosticSeverity::Info;
+    return KCompilerDiagnosticSeverity::Error;
+}
+
+std::vector<KCompilerDiagnostic> diagnostics(const std::string& output,
+    const std::string& mainFileId)
 {
     std::vector<KCompilerDiagnostic> result;
     std::size_t start = 0;
@@ -163,9 +201,21 @@ std::vector<KCompilerDiagnostic> diagnostics(const std::string& output)
             if (validBuildFileId(fileId) && !number.empty() &&
                 std::all_of(number.begin(), number.end(), [](unsigned char c) { return c >= '0' && c <= '9'; }))
             {
-                try { result.push_back({KCompilerDiagnosticSeverity::Error, fileId,
-                    static_cast<std::size_t>(std::stoull(number)), line.substr(second + 1)}); } catch (...) {}
+                try
+                {
+                    const std::string message = line.substr(second + 1);
+                    result.push_back({severity(message), fileId,
+                        static_cast<std::size_t>(std::stoull(number)), message});
+                }
+                catch (...)
+                {
+                }
             }
+        }
+        else if (line.starts_with("!") || line.find("LaTeX Warning:") != std::string::npos ||
+            line.find("Package ") != std::string::npos && line.find(" Warning:") != std::string::npos)
+        {
+            result.push_back({severity(line), mainFileId, 1, line});
         }
         if (end == std::string::npos) break;
         start = end + 1;
@@ -260,7 +310,9 @@ public:
         for (const KCompilerEngine engine : {KCompilerEngine::PdfLatex, KCompilerEngine::XeLatex, KCompilerEngine::LuaLatex})
             if (findExecutable(m_roots, engine)) engines.push_back(engine);
         if (engines.empty()) return std::vector<KDetectedCompiler>{};
-        return std::vector<KDetectedCompiler>{{"windows-tex", "Windows TeX", std::move(engines)}};
+        const bool latexmk = findNamedExecutable(m_roots, L"latexmk.exe").has_value();
+        return std::vector<KDetectedCompiler>{{"windows-tex", latexmk ?
+            "Windows TeX (latexmk)" : "Windows TeX", std::move(engines)}};
     }
     KResult<KCompilerRunResult> run(const KCompilerRun& command, std::stop_token stop) override
     {
@@ -284,15 +336,28 @@ public:
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         if (!SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
             return KError{KErrorCode::Unavailable, "build.processFailure", true};
-        std::wstring commandLine = quote(executable->wstring()) +
-            L" -interaction=nonstopmode -halt-on-error -file-line-error -no-shell-escape -synctex=1 " +
-            quote(fromUtf8(command.m_mainFileId));
+        const std::optional<fs::path> latexmk = findNamedExecutable(m_roots, L"latexmk.exe");
+        const fs::path launcher = latexmk.value_or(*executable);
+        std::wstring commandLine = quote(launcher.wstring());
+        if (latexmk)
+        {
+            commandLine += command.m_engine == KCompilerEngine::PdfLatex ? L" -pdf" :
+                command.m_engine == KCompilerEngine::XeLatex ? L" -pdfxe" : L" -pdflua";
+            commandLine += L" -use-make -interaction=nonstopmode -halt-on-error -file-line-error"
+                L" -no-shell-escape -synctex=1 ";
+        }
+        else
+        {
+            commandLine += L" -interaction=nonstopmode -halt-on-error -file-line-error"
+                L" -no-shell-escape -synctex=1 ";
+        }
+        commandLine += quote(fromUtf8(command.m_mainFileId));
         STARTUPINFOW startup{}; startup.cb = sizeof(startup);
         startup.dwFlags = STARTF_USESTDHANDLES;
         startup.hStdOutput = writePipe.value; startup.hStdError = writePipe.value;
         startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
         PROCESS_INFORMATION process{};
-        if (!CreateProcessW(executable->c_str(), commandLine.data(), nullptr, nullptr, TRUE,
+        if (!CreateProcessW(launcher.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
             CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, working.c_str(), &startup, &process))
             return KError{KErrorCode::Unavailable, "build.processFailure", true};
         KHandle processHandle(process.hProcess), threadHandle(process.hThread);
@@ -303,7 +368,7 @@ public:
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(command.m_timeoutMs);
         for (;;)
         {
-            appendPipe(readPipe.value, result.m_output, result.m_outputTruncated);
+            appendPipe(readPipe.value, result.m_output, result.m_outputTruncated, command.m_onOutput);
             if (WaitForSingleObject(processHandle.value, 0) == WAIT_OBJECT_0) break;
             if (stop.stop_requested())
             { TerminateJobObject(job.value, 2); result.m_terminal = KCompilerTerminal::Cancelled; break; }
@@ -312,14 +377,16 @@ public:
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         WaitForSingleObject(processHandle.value, 2000);
-        appendPipe(readPipe.value, result.m_output, result.m_outputTruncated);
+        appendPipe(readPipe.value, result.m_output, result.m_outputTruncated, command.m_onOutput);
         DWORD exitCode = 1;
         GetExitCodeProcess(processHandle.value, &exitCode);
         result.m_exitCode = static_cast<int>(exitCode);
         if (result.m_terminal != KCompilerTerminal::Cancelled && result.m_terminal != KCompilerTerminal::TimedOut)
             result.m_terminal = exitCode == 0 ? KCompilerTerminal::Succeeded : KCompilerTerminal::Failed;
-        result.m_output = safeUtf8(result.m_output);
-        result.m_diagnostics = diagnostics(result.m_output);
+        bool conversionTruncated = false;
+        result.m_output = safeUtf8(result.m_output, conversionTruncated);
+        result.m_outputTruncated = result.m_outputTruncated || conversionTruncated;
+        result.m_diagnostics = diagnostics(result.m_output, command.m_mainFileId);
         if (result.m_terminal == KCompilerTerminal::Succeeded)
         {
             const fs::path stem = mainPath.parent_path() / mainPath.stem();

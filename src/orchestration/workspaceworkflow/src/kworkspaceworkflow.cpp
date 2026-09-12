@@ -148,6 +148,13 @@ public:
         if (!builds) return KError{KErrorCode::Unavailable, "build.notAvailable", false};
         return builds->cancel(jobId);
     }
+    KResult<build::KBuildStatus> buildStatus(const std::string& jobId) const override
+    {
+        std::shared_ptr<build::IKBuilds> builds;
+        { std::scoped_lock lock(m_buildMutex); builds = m_builds; }
+        if (!builds) return KError{KErrorCode::Unavailable, "build.notAvailable", false};
+        return builds->status(jobId);
+    }
     KResult<preview::KPreviewChunk> readPreview(const std::string& id,
         std::size_t offset, std::size_t count) const override
     {
@@ -175,7 +182,7 @@ private:
     std::unique_ptr<document::IKDocuments> m_documents;
     std::unique_ptr<search::IKSearch> m_search;
     std::shared_ptr<build::IKBuilds> m_builds;
-    std::mutex m_buildMutex;
+    mutable std::mutex m_buildMutex;
     std::shared_ptr<preview::IKPreviewArtifacts> m_previews;
     std::shared_ptr<navigation::IKNavigation> m_navigation;
 };

@@ -115,6 +115,10 @@ public:
         return build::KBuildResult{command.m_jobId, build::KBuildTerminal::Succeeded, 0,
             "ok", false, {}};
     }
+    KResult<build::KBuildStatus> status(const std::string& jobId) const override
+    {
+        return build::KBuildStatus{jobId, build::KBuildState::Succeeded, "ok", false};
+    }
     KResult<bool> cancel(const std::string&) override { return true; }
 };
 
@@ -244,6 +248,9 @@ int main()
          {"mainFileId", KValue{std::string("main.tex")}}, {"engine", KValue{std::string("xelatex")}},
          {"timeoutMs", KValue{3000.0}}}), std::nullopt, {});
     check(v2::validateBuildStartResponse(response), "build start response");
+    response = handler.dispatch(request("status", "build.status",
+        {{"jobId", KValue{std::string("job-1")}}}), std::nullopt, {});
+    check(v2::validateBuildStatusResponse(response), "build status response");
     response = handler.dispatch(request("cancel", "build.cancel",
         {{"jobId", KValue{std::string("job-1")}}}), std::nullopt, {});
     check(v2::validateBuildCancelResponse(response), "build cancel response");
@@ -269,8 +276,10 @@ int main()
     response = handler.dispatch(request("session-save", "session.save",
         {{"workspaceRoot", KValue{std::string("D:/论文")}},
          {"openFiles", KValue{KValue::KArray{KValue{std::string("main.tex")}}}},
-         {"activeFile", KValue{std::string("main.tex")}},
-         {"sidebarWidth", KValue{300.0}}, {"previewOpen", KValue{true}}}), std::nullopt, {});
+          {"activeFile", KValue{std::string("main.tex")}},
+          {"sidebarWidth", KValue{300.0}}, {"editorWidth", KValue{760.0}},
+          {"previewOpen", KValue{true}}, {"activeLine", KValue{12.0}},
+          {"activeColumn", KValue{5.0}}, {"previewZoom", KValue{150.0}}}), std::nullopt, {});
     check(v2::validateSessionSaveResponse(response), "session save response");
     response = handler.dispatch(request("session-restore", "session.restore"), std::nullopt, {});
     check(v2::validateSessionRestoreResponse(response), "session restore response");

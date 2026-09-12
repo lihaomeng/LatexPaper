@@ -12,6 +12,7 @@ class IKCompilerBackend;
 class IKBuildArtifactPublisher;
 enum class KBuildEngine { PdfLatex, XeLatex, LuaLatex };
 enum class KBuildTerminal { Succeeded, Failed, Cancelled, TimedOut, CompilerUnavailable };
+enum class KBuildState { Running, Succeeded, Failed, Cancelled, TimedOut, CompilerUnavailable };
 enum class KDiagnosticSeverity { Info, Warning, Error };
 struct KCompilerCapability
 {
@@ -45,12 +46,20 @@ struct KBuildResult
     std::string m_artifactId;
     bool m_syncTexAvailable = false;
 };
+struct KBuildStatus
+{
+    std::string m_jobId;
+    KBuildState m_state = KBuildState::Running;
+    std::string m_output;
+    bool m_outputTruncated = false;
+};
 class IKBuilds
 {
 public:
     virtual ~IKBuilds() = default;
     virtual KResult<std::vector<KCompilerCapability>> detect(std::stop_token stop = {}) = 0;
     virtual KResult<KBuildResult> start(const KBuildCommand& command, std::stop_token stop = {}) = 0;
+    virtual KResult<KBuildStatus> status(const std::string& jobId) const = 0;
     virtual KResult<bool> cancel(const std::string& jobId) = 0;
 };
 std::shared_ptr<IKBuilds> createBuilds(std::shared_ptr<IKBuildSnapshotStore> snapshots,

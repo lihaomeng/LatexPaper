@@ -1,7 +1,8 @@
 import {
   validateSearchStartResponse, validateBuildDetectResponse, validateBuildStartResponse,
-  validateBuildCancelResponse, type SearchStartResponseResult, type BuildDetectResponseResult,
+  validateBuildStatusResponse, validateBuildCancelResponse, type SearchStartResponseResult, type BuildDetectResponseResult,
   type BuildStartResponseResult,
+  type BuildStatusResponseResult,
   validatePreviewReadResponse, validateNavigationForwardResponse, validateNavigationReverseResponse,
   type NavigationForwardResponseResult, type NavigationReverseResponseResult,
 } from '../../.generated/rpc/protocol';
@@ -42,6 +43,12 @@ export class AuthoringRpcClient {
       clientSequence: this.nextSequence(), method: 'build.cancel', params: { jobId } }, signal);
     if (!validateBuildCancelResponse(response)) throw new Error('INVALID_RESPONSE');
     return response.result.accepted;
+  }
+  async status(jobId: string, signal?: AbortSignal): Promise<BuildStatusResponseResult> {
+    const response = await this.rpc.request({ version: 2, id: crypto.randomUUID(),
+      clientSequence: this.nextSequence(), method: 'build.status', params: { jobId } }, signal);
+    if (!validateBuildStatusResponse(response)) throw new Error('INVALID_RESPONSE');
+    return response.result;
   }
   async readPdf(artifactId: string, signal?: AbortSignal): Promise<Uint8Array> {
     const parts: Uint8Array[] = []; let offset = 0; let total = 1;

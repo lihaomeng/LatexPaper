@@ -48,6 +48,7 @@ public:
         std::stop_token stop = {}) = 0;
     virtual KResult<build::KBuildResult> startBuild(const build::KBuildCommand& command,
         std::stop_token stop = {}) = 0;
+    virtual KResult<build::KBuildStatus> buildStatus(const std::string& jobId) const = 0;
     virtual KResult<bool> cancelBuild(const std::string& jobId) = 0;
     virtual KResult<preview::KPreviewChunk> readPreview(const std::string& artifactId,
         std::size_t offset, std::size_t count) const = 0;

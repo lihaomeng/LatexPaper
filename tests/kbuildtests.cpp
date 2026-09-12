@@ -67,6 +67,31 @@ int main()
             std::get<KBuildResult>(success).m_artifactId=="artifact-1" &&
             std::get<KBuildResult>(success).m_syncTexAvailable,
             "snapshot compile, artifact publication, utf8 sanitization and cleanup");
+        KResult<KBuildStatus> completedStatus = builds->status("job-ok");
+        check(std::holds_alternative<KBuildStatus>(completedStatus) &&
+            std::get<KBuildStatus>(completedStatus).m_state == KBuildState::Succeeded &&
+            !std::get<KBuildStatus>(completedStatus).m_output.empty(),
+            "completed build status retained");
+        fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), tex / L"latexmk.exe",
+            fs::copy_options::overwrite_existing, error);
+        KResult<KBuildResult> latexmk = builds->start(
+            {"job-latexmk", "snapshot-latexmk", "main.tex", KBuildEngine::XeLatex, 3000});
+        check(std::holds_alternative<KBuildResult>(latexmk) &&
+            std::get<KBuildResult>(latexmk).m_terminal == KBuildTerminal::Succeeded &&
+            std::get<KBuildResult>(latexmk).m_output.find("launcher:latexmk") != std::string::npos,
+            "latexmk preferred when available");
+        const auto& latexmkDiagnostics = std::get<KBuildResult>(latexmk).m_diagnostics;
+        check(latexmkDiagnostics.size() >= 2 &&
+            latexmkDiagnostics[1].m_severity == KDiagnosticSeverity::Warning,
+            "diagnostic warning severity");
+        write(workspace / L"main.tex", "LARGE_INVALID");
+        KResult<KBuildResult> bounded = builds->start(
+            {"job-bounded", "snapshot-bounded", "main.tex", KBuildEngine::XeLatex, 3000});
+        check(std::holds_alternative<KBuildResult>(bounded) &&
+            std::get<KBuildResult>(bounded).m_terminal == KBuildTerminal::Succeeded &&
+            std::get<KBuildResult>(bounded).m_output.size() <= 1024U * 1024U &&
+            std::get<KBuildResult>(bounded).m_outputTruncated,
+            "utf8 replacement remains inside rpc log bound");
         write(workspace / L"main.tex", "ERROR");
         KResult<KBuildResult> failed = builds->start({"job-fail", "snapshot-fail", "main.tex", KBuildEngine::XeLatex, 3000});
         check(std::holds_alternative<KBuildResult>(failed) &&
@@ -82,11 +107,22 @@ int main()
         std::jthread runner([&] { cancelled = builds->start(
             {"job-cancel", "snapshot-cancel", "main.tex", KBuildEngine::XeLatex, 10000}); });
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        KResult<KBuildStatus> runningStatus = builds->status("job-cancel");
+        check(std::holds_alternative<KBuildStatus>(runningStatus) &&
+            std::get<KBuildStatus>(runningStatus).m_state == KBuildState::Running &&
+            std::get<KBuildStatus>(runningStatus).m_output.find("fake diagnostic") != std::string::npos,
+            "running build exposes bounded live output");
         KResult<bool> cancellation = builds->cancel("job-cancel");
         check(std::holds_alternative<bool>(cancellation) && std::get<bool>(cancellation), "explicit cancel accepted");
         runner.join();
         check(std::holds_alternative<KBuildResult>(cancelled) &&
             std::get<KBuildResult>(cancelled).m_terminal == KBuildTerminal::Cancelled, "cancel terminates compiler job");
+        KResult<KBuildStatus> cancelledStatus = builds->status("job-cancel");
+        check(std::holds_alternative<KBuildStatus>(cancelledStatus) &&
+            std::get<KBuildStatus>(cancelledStatus).m_state == KBuildState::Cancelled,
+            "cancelled build status retained");
+        check(std::holds_alternative<KError>(builds->status("job-unknown")),
+            "unknown build status is explicit");
         KResult<KBuildResult> unavailable = builds->start(
             {"job-missing", "snapshot-missing", "main.tex", KBuildEngine::PdfLatex, 3000});
         check(std::holds_alternative<KBuildResult>(unavailable) &&

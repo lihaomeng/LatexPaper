@@ -34,10 +34,10 @@ npm.cmd run check（由桌面构建执行）
 287/287 passed；ESLint、TypeScript、Vite build passed
 
 ctest --test-dir out/desktop-release -C Release --output-on-failure
-31/31 passed，0 failed，26.45 s
+33/33 passed，0 failed，32.67 s
 
 package-lite.ps1 内再次运行 CTest
-31/31 passed，0 failed；随后归档测试与单文件 EXE smoke 均通过
+33/33 passed，0 failed；随后归档测试与单文件 EXE smoke 均通过
 ```
 
 ## 未验证项与结论
@@ -45,3 +45,11 @@ package-lite.ps1 内再次运行 CTest
 - 当前 PATH、配置根与随包目录均无 `pdflatex`、`xelatex`、`lualatex` 或 `synctex`，无法产生真实论文 PDF／`.synctex.gz` 做工具链端到端验证。
 - 该缺口不再是代码 Backend 缺失；补入 TeX 后无需修改 Use Case 或 RPC，只需重启让 Composition 重新发现命令。
 - 本阶段代码、替换边界和自动化失败路径验收完成；真实宏包、字体与 SyncTeX 精度属于外部 TeX 环境验收，不伪造通过。
+
+## 2026-09-12：编辑／预览联动与缓存生命周期收口
+
+- 保存成功后的 900 ms 防抖自动编译已接入；打开项目、冲突、保存中或已有编译任务不会误触发并发构建。
+- Monaco 光标可发起正向 SyncTeX；PDF.js 自动切页、滚动并显示定位标记。反向 SyncTeX 坐标按 PDF 实际缩放还原。
+- 预览支持 50%～300% 缩放和恢复 100%，会话模块持久化并恢复缩放值。
+- Local Artifact Store 校验不透明 ID，并发访问受保护；缓存最多保留 20 个产物目录且总量至多 512 MiB，优先保留当前产物，不跟随 Reparse Point。
+- 最新前端 287/287、Debug/Release CTest 各 33/33。真实 `synctex.exe` 定位精度仍需具有 TeX 的环境验收。

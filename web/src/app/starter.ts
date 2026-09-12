@@ -1,4 +1,19 @@
 import type { DraftSnapshot } from "../features/session";
+export const newProjectMain = `% LightOverLeaf 本地项目
+\\documentclass[a4paper,12pt]{article}
+\\usepackage[margin=2.5cm]{geometry}
+
+\\title{My LightOverLeaf Project}
+\\author{Author}
+\\date{\\today}
+
+\\begin{document}
+\\maketitle
+
+Start writing here.
+
+\\end{document}
+`;
 const main = `% LightOverLeaf · 内存草稿示例
 % 草稿缓存不等于保存到本地项目文件。
 \\documentclass[UTF8, a4paper, 12pt]{ctexart}
@@ -76,4 +91,3 @@ export const starter: DraftSnapshot = {
   ],
   open: ["main.tex"], active: "main.tex",
 };
-

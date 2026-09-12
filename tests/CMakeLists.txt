@@ -31,6 +31,16 @@ target_link_libraries(LightOverLeafSearchTests PRIVATE lol_search_app lol_search
 lol_register(LightOverLeafSearchTests test tests)
 add_test(NAME LightOverLeafSearchTests COMMAND LightOverLeafSearchTests)
 
+add_executable(LightOverLeafPerformanceTests kperformancetests.cpp)
+target_compile_definitions(LightOverLeafPerformanceTests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(LightOverLeafPerformanceTests PRIVATE
+  lol_workspace_adapter_localfs lol_workspace_app lol_workspace_inbound
+  lol_search_adapter_localfs lol_search_app lol_search_inbound
+  lol_document_adapter_localfs lol_document_app lol_document_inbound)
+lol_register(LightOverLeafPerformanceTests test tests)
+add_test(NAME LightOverLeafPerformanceTests COMMAND LightOverLeafPerformanceTests)
+set_tests_properties(LightOverLeafPerformanceTests PROPERTIES TIMEOUT 30)
+
 add_executable(LightOverLeafFakeCompiler kfakecompiler.cpp)
 lol_register(LightOverLeafFakeCompiler test tests)
 add_executable(LightOverLeafBuildTests kbuildtests.cpp)

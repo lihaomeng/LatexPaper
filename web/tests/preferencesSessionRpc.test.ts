@@ -15,7 +15,8 @@ test('preferences and session RPC methods remain separate and validated', async 
           timeoutMs: request.params.timeoutMs ?? 120000, autoCompile: request.params.autoCompile ?? false }
       : request.method === 'session.restore'
         ? { found: true, state: { workspaceRoot: 'D:/paper', openFiles: ['main.tex'],
-            activeFile: 'main.tex', sidebarWidth: 280, previewOpen: true } }
+            activeFile: 'main.tex', sidebarWidth: 280, editorWidth: 720, previewOpen: true,
+            activeLine: 12, activeColumn: 4, previewZoom: 125 } }
         : request.method === 'session.save' ? { saved: true } : { roots: ['D:/paper'] };
     success(JSON.stringify({ ...base, result })); return () => {};
   } };

@@ -3,7 +3,9 @@
 #include <lightoverleaf/build/outbound/ikcompilerbackend.h>
 #include <lightoverleaf/build/outbound/ikbuildartifactpublisher.h>
 #include <lightoverleaf/build/domain/kbuildpolicy.h>
+#include <algorithm>
 #include <functional>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -13,6 +15,22 @@ namespace lightoverleaf::build
 namespace
 {
 using KStopCallback = std::stop_callback<std::function<void()>>;
+constexpr std::size_t kCompletedStatusLimit = 20;
+
+KBuildState buildState(KBuildTerminal terminal)
+{
+    return terminal == KBuildTerminal::Succeeded ? KBuildState::Succeeded :
+        terminal == KBuildTerminal::Cancelled ? KBuildState::Cancelled :
+        terminal == KBuildTerminal::TimedOut ? KBuildState::TimedOut :
+        terminal == KBuildTerminal::CompilerUnavailable ? KBuildState::CompilerUnavailable :
+        KBuildState::Failed;
+}
+
+struct KActiveBuild
+{
+    std::stop_source m_stop;
+    KBuildStatus m_status;
+};
 }
 class KBuilds final : public IKBuilds
 {
@@ -24,7 +42,7 @@ public:
     ~KBuilds() override
     {
         std::scoped_lock lock(m_mutex);
-        for (auto& [jobId, source] : m_active) source.request_stop();
+        for (auto& [jobId, active] : m_active) active.m_stop.request_stop();
     }
     KResult<std::vector<KCompilerCapability>> detect(std::stop_token stop) override
     {
@@ -58,7 +76,8 @@ public:
             std::scoped_lock lock(m_mutex);
             if (m_active.contains(command.m_jobId))
                 return KError{KErrorCode::Conflict, "build.jobExists", false};
-            m_active.emplace(command.m_jobId, source);
+            m_active.emplace(command.m_jobId,
+                KActiveBuild{source, {command.m_jobId, KBuildState::Running, {}, false}});
         }
         const auto finish = [&]
         {
@@ -75,13 +94,24 @@ public:
                 release{m_snapshots.get(), command.m_snapshotId};
             const KCompilerEngine engine = command.m_engine == KBuildEngine::PdfLatex ? KCompilerEngine::PdfLatex :
                 command.m_engine == KBuildEngine::XeLatex ? KCompilerEngine::XeLatex : KCompilerEngine::LuaLatex;
+            const auto onOutput = [this, jobId = command.m_jobId](std::string_view output,
+                bool truncated)
+            {
+                std::scoped_lock lock(m_mutex);
+                const auto found = m_active.find(jobId);
+                if (found == m_active.end()) return;
+                found->second.m_status.m_output.assign(output);
+                found->second.m_status.m_outputTruncated = truncated;
+            };
             KResult<KCompilerRunResult> executed = m_backend->run({command.m_jobId, command.m_snapshotId,
-                command.m_mainFileId, engine, command.m_timeoutMs}, source.get_token());
-            finish();
-            if (const KError* error = std::get_if<KError>(&executed)) return *error;
+                command.m_mainFileId, engine, command.m_timeoutMs, onOutput}, source.get_token());
+            if (const KError* error = std::get_if<KError>(&executed)) { finish(); return *error; }
             KCompilerRunResult value = std::get<KCompilerRunResult>(std::move(executed));
             if (value.m_output.size() > kMaxBuildLogBytes || value.m_diagnostics.size() > 1000)
+            {
+                finish();
                 return KError{KErrorCode::ResourceExhausted, "build.outputTooLarge", false};
+            }
             const KBuildTerminal terminal = value.m_terminal == KCompilerTerminal::Succeeded ? KBuildTerminal::Succeeded :
                 value.m_terminal == KCompilerTerminal::Cancelled ? KBuildTerminal::Cancelled :
                 value.m_terminal == KCompilerTerminal::TimedOut ? KBuildTerminal::TimedOut :
@@ -95,18 +125,20 @@ public:
             bool syncTexAvailable = false;
             if (terminal == KBuildTerminal::Succeeded && m_publisher)
             {
-                if (value.m_pdf.empty()) return KError{KErrorCode::NotFound, "build.pdfMissing", false};
+                if (value.m_pdf.empty()) { finish(); return KError{KErrorCode::NotFound, "build.pdfMissing", false}; }
                 KResult<KPublishedBuildArtifact> published = m_publisher->publish(command.m_jobId,
                     value.m_pdf, value.m_syncTex);
-                if (const KError* error = std::get_if<KError>(&published)) return *error;
+                if (const KError* error = std::get_if<KError>(&published)) { finish(); return *error; }
                 KPublishedBuildArtifact artifact =
                     std::get<KPublishedBuildArtifact>(std::move(published));
                 artifactId = std::move(artifact.m_artifactId);
                 syncTexAvailable = artifact.m_syncTexAvailable;
             }
-            return KBuildResult{command.m_jobId, terminal, value.m_exitCode,
+            KBuildResult result{command.m_jobId, terminal, value.m_exitCode,
                 std::move(value.m_output), value.m_outputTruncated, std::move(projected),
                 std::move(artifactId), syncTexAvailable};
+            remember(result);
+            return result;
         }
         catch (...)
         {
@@ -114,20 +146,50 @@ public:
             return KError{KErrorCode::Internal, "build.backendFailure", false};
         }
     }
+    KResult<KBuildStatus> status(const std::string& jobId) const override
+    {
+        if (!validBuildToken(jobId))
+            return KError{KErrorCode::InvalidArgument, "build.invalidArgument", false};
+        std::scoped_lock lock(m_mutex);
+        const auto active = m_active.find(jobId);
+        if (active != m_active.end()) return active->second.m_status;
+        const auto completed = m_completed.find(jobId);
+        if (completed != m_completed.end()) return completed->second;
+        return KError{KErrorCode::NotFound, "build.jobNotFound", false};
+    }
     KResult<bool> cancel(const std::string& jobId) override
     {
         if (!validBuildToken(jobId)) return KError{KErrorCode::InvalidArgument, "build.invalidArgument", false};
         std::scoped_lock lock(m_mutex);
         const auto found = m_active.find(jobId);
         if (found == m_active.end()) return false;
-        return found->second.request_stop();
+        return found->second.m_stop.request_stop();
     }
+private:
+    void remember(const KBuildResult& result)
+    {
+        std::scoped_lock lock(m_mutex);
+        m_active.erase(result.m_jobId);
+        m_completed.insert_or_assign(result.m_jobId, KBuildStatus{result.m_jobId,
+            buildState(result.m_terminal), result.m_output, result.m_outputTruncated});
+        m_completedOrder.erase(std::remove(m_completedOrder.begin(), m_completedOrder.end(),
+            result.m_jobId), m_completedOrder.end());
+        m_completedOrder.push_back(result.m_jobId);
+        while (m_completedOrder.size() > kCompletedStatusLimit)
+        {
+            m_completed.erase(m_completedOrder.front());
+            m_completedOrder.pop_front();
+        }
+    }
+
 private:
     std::shared_ptr<IKBuildSnapshotStore> m_snapshots;
     std::shared_ptr<IKCompilerBackend> m_backend;
     std::shared_ptr<IKBuildArtifactPublisher> m_publisher;
-    std::mutex m_mutex;
-    std::map<std::string, std::stop_source> m_active;
+    mutable std::mutex m_mutex;
+    std::map<std::string, KActiveBuild> m_active;
+    std::map<std::string, KBuildStatus> m_completed;
+    std::deque<std::string> m_completedOrder;
 };
 
 std::shared_ptr<IKBuilds> createBuilds(std::shared_ptr<IKBuildSnapshotStore> snapshots,

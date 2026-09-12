@@ -84,6 +84,38 @@
           } }
       }
     },
+    "BuildStatusRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "method", "params"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "method": { "type": "string", "const": "build.status" },
+        "params": { "type": "object", "additionalProperties": false,
+          "required": ["jobId"], "properties": {
+            "jobId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" }
+          } }
+      }
+    },
+    "BuildStatusResponse": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "ok": { "type": "boolean", "const": true },
+        "method": { "type": "string", "const": "build.status" },
+        "result": { "type": "object", "additionalProperties": false,
+          "required": ["jobId", "state", "output", "outputTruncated"], "properties": {
+            "jobId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" },
+            "state": { "type": "string", "enum": ["running", "succeeded", "failed", "cancelled", "timedOut", "compilerUnavailable"] },
+            "output": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 1048576 },
+            "outputTruncated": { "type": "boolean" }
+          } }
+      }
+    },
     "BuildCancelRequest": {
       "type": "object", "additionalProperties": false,
       "required": ["version", "id", "clientSequence", "method", "params"],
@@ -117,6 +149,8 @@
     { "$ref": "#/$defs/BuildDetectResponse" },
     { "$ref": "#/$defs/BuildStartRequest" },
     { "$ref": "#/$defs/BuildStartResponse" },
+    { "$ref": "#/$defs/BuildStatusRequest" },
+    { "$ref": "#/$defs/BuildStatusResponse" },
     { "$ref": "#/$defs/BuildCancelRequest" },
     { "$ref": "#/$defs/BuildCancelResponse" }
   ]

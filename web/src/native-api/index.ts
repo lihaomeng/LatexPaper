@@ -8,6 +8,7 @@ export { RpcEventCursor } from './events';
 export { NativeEventSubscription, createNativeEvents } from './subscription';
 export { CancellationRpcClient } from './cancellation';
 export { createStartupEvents } from './smoke';
+export { payloadSmokeProbe } from './payloadSmoke';
 export type { PingRequest, NativeApi } from "../../.generated/rpc/contract";
 /** M0 fake is explicit: no native capability is advertised or simulated. */
 export class FakeNativeApi implements NativeApi {

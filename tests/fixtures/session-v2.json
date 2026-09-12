@@ -1,0 +1,42 @@
+[
+  {
+    "name": "session save full layout and cursor",
+    "type": "SessionSaveRequest",
+    "value": {
+      "version": 2,
+      "id": "session-save-full",
+      "clientSequence": 1,
+      "method": "session.save",
+      "params": {
+        "workspaceRoot": "workspace-1",
+        "openFiles": ["main.tex"],
+        "activeFile": "main.tex",
+        "sidebarWidth": 280,
+        "editorWidth": 720,
+        "previewOpen": true,
+        "activeLine": 12,
+        "activeColumn": 4,
+        "previewZoom": 125
+      }
+    },
+    "accepted": true
+  },
+  {
+    "name": "session save rejects legacy partial layout",
+    "type": "SessionSaveRequest",
+    "value": {
+      "version": 2,
+      "id": "session-save-partial",
+      "clientSequence": 2,
+      "method": "session.save",
+      "params": {
+        "workspaceRoot": "workspace-1",
+        "openFiles": ["main.tex"],
+        "activeFile": "main.tex",
+        "sidebarWidth": 280,
+        "previewOpen": true
+      }
+    },
+    "accepted": false
+  }
+]

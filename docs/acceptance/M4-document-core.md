@@ -215,5 +215,14 @@ M4 仍需 4 MiB 真实跨进程、特权 Reparse Point/极端长路径、崩溃�
 
 - M5～M8 合入后重新配置完整 Release；架构检查通过，共 85 个显式 Target。
 - 前端 `npm.cmd run check` 为 287/287，通过 ESLint、TypeScript 和 Vite 构建。
-- 最终 `ctest --test-dir out/desktop-release -C Release --output-on-failure` 为 31/31，通过 Desktop Smoke、Renderer Recovery、真实 CEF Composition、Workspace/Document、架构、非法依赖与生成漂移测试。
-- M4 的业务实现与自动化回归已完成；当前未关闭的均需真实可见桌面、特权文件系统、极值跨进程或崩溃注入环境。未取得这些条件，不将其表述为人工/环境验收通过。
+- 最终 `ctest --test-dir out/desktop-release -C Release --output-on-failure` 为 33/33，通过 Desktop Smoke、Renderer Recovery、真实 CEF Composition、4 MiB Renderer 往返、Workspace/Document、性能、架构、非法依赖与生成漂移测试。
+- M4 的业务实现与自动化回归已完成；4 MiB 真实跨进程边界随后已关闭。当前未关闭项需要真实可见桌面、特权文件系统或崩溃注入环境；未取得这些条件，不将其表述为人工/环境验收通过。
+
+## 2026-09-12：4 MiB 真实 CEF Renderer 往返收口
+
+- Bootstrap 新增仅供自动验收的 `--smoke-test-payload`，创建独立临时 Workspace，并通过真实 CEF Browser/Renderer、生产 Transport、RPC Core、Workflow 与 LocalFS Adapter 执行完整链路。
+- React 探针生成恰好 4 MiB UTF-8 文本，经 `document.saveAs` 原子保存，再用 `document.open` 读取并逐字节比较；任何长度或内容偏差都会使桌面进程返回非零。
+- 测试结束无论成功或失败均关闭 Workspace；Bootstrap RAII 清理进程专属临时目录。本轮最终 `LightOverLeafRpcPayloadSmoke` 通过，耗时 1.62 秒，测试后未发现残留目录。
+- 该测试关闭“4 MiB 真实跨进程边界”遗留项，不把 Loopback 或纯 C++ 调用冒充 CEF 跨进程证据。
+
+M4 当前外部验收项缩减为：特权 Reparse Point 实物夹具、系统级极端长路径、崩溃中断注入，以及可见 CEF 中文 IME/视觉人工验收。业务实现、自动化回归及 4 MiB 跨进程边界已完成。

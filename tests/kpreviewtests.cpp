@@ -18,6 +18,11 @@ int main(){
    check(std::holds_alternative<KPreviewChunk>(second)&&std::get<KPreviewChunk>(second).m_bytes.size()==pdf.size()-7,"bounded final chunk");
    check(std::holds_alternative<std::vector<std::uint8_t>>(app->readSyncTex(d->m_artifactId)),"synctex read");}
   const std::string bad="not pdf";check(std::holds_alternative<KError>(app->publish("job-2",{reinterpret_cast<const std::uint8_t*>(bad.data()),bad.size()},{})),"invalid pdf rejected");
+  check(std::holds_alternative<KError>((*store)->readPdf("../escape")),"unsafe artifact id rejected");
+  for(int index=0;index<25;++index){const std::string job="retention-"+std::to_string(index);
+   check(std::holds_alternative<KPreviewDescriptor>(app->publish(job,{reinterpret_cast<const std::uint8_t*>(pdf.data()),pdf.size()},{})),"retention publish");}
+  std::size_t directories=0;for(const auto&entry:fs::directory_iterator(root))if(entry.is_directory())++directories;
+  check(directories<=20,"artifact directory retention");
  }
  fs::remove_all(root,e);return failures?1:0;
 }

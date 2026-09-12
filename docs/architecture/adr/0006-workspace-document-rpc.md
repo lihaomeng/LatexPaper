@@ -6,7 +6,7 @@ Workspace 和 Document 保持独立。WorkspaceWorkflow 仅通过两个 Inbound 
 
 纯 C++ Endpoint 注入异步 Dispatcher 和响应 Validator。业务工作串行进入有界 Worker，完成结果调度回端点所属线程，继续使用已有取消、代际隔离和关闭规则。Qt 目录选择留在 UI 线程；所选绝对路径只传入原生组合根，不进入 wire DTO。
 
-V2 以多个 Schema 文件作为同一个生成输入，统一生成联合请求/响应验证器。正文限制为 4 MiB UTF-8，目录树最多 10000 项；CEF 异步通道 JSON 字节限制为 32 MiB，以容纳 JSON 转义开销。真实极值跨进程验收尚待完成。
+V2 以多个 Schema 文件作为同一个生成输入，统一生成联合请求/响应验证器。正文限制为 4 MiB UTF-8，目录树最多 10000 项；CEF 异步通道 JSON 字节限制为 32 MiB，以容纳 JSON 转义开销。2026-09-12 已由真实 CEF Renderer 保存/读取恰好 4 MiB 正文并逐字节比较，跨进程极值验收通过。
 
 前端草稿和原生项目使用独立 EditorSession 与独立 Monaco URI。保存以一次不可变快照为批次，串行写入全部 Dirty 文件；每次仅确认被保存的编辑版本，晚到的新修改留给下一批。发生冲突停止该批次，保留失败文件 Dirty；旧会话完成不能修改现会话。未保存时暂不允许切换项目。
 

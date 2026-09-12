@@ -142,8 +142,12 @@ svg { flex-shrink: 0; vertical-align: middle; }
 kbd { font: 10px Consolas, monospace; color: #a7bdc8; background: #1d2630; border-radius: 3px; padding: 1px 6px; }
 .pdf-viewer { height: 100%; min-height: 0; display: flex; flex-direction: column; width: 100%; }
 .pdf-controls { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 6px; background: #252f40; }
+.zoom-controls { display: inline-flex; align-items: center; gap: 4px; margin-left: 14px; }
+.zoom-controls button:nth-child(2) { min-width: 54px; }
 .pdf-scroll { min-height: 0; flex: 1; overflow: auto; padding: 22px; text-align: center; }
-.pdf-scroll canvas { max-width: 100%; height: auto; background: white; box-shadow: 0 3px 16px #0008; }
+.pdf-page { position: relative; display: inline-block; line-height: 0; }
+.pdf-scroll canvas { background: white; box-shadow: 0 3px 16px #0008; }
+.synctex-marker { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); border: 2px solid #e34c4c; border-radius: 50%; background: #ef535044; box-shadow: 0 0 0 4px #ef535022; pointer-events: none; }
 .startup { height: 100dvh; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 30px; text-align: center; color: #91b69c; }
 .startup h1 { color: #dce5de; font-size: 25px; font-weight: 400; }.startup p { color: #8e9dad; max-width: 480px; line-height: 1.8; }
 .startup button { border: 1px solid #5c7767; border-radius: 4px; padding: 8px 15px; }
