@@ -1,0 +1,13 @@
+add_library(lol_search_inbound INTERFACE)
+target_include_directories(lol_search_inbound INTERFACE inbound/include)
+target_link_libraries(lol_search_inbound INTERFACE lol_kernel)
+lol_register(lol_search_inbound inbound search)
+
+add_library(lol_search_outbound INTERFACE)
+target_include_directories(lol_search_outbound INTERFACE outbound/include)
+target_link_libraries(lol_search_outbound INTERFACE lol_kernel)
+lol_register(lol_search_outbound outbound search)
+
+add_library(lol_search_app STATIC src/ksearch.cpp)
+target_link_libraries(lol_search_app PRIVATE lol_search_domain lol_search_inbound lol_search_outbound)
+lol_register(lol_search_app app search)

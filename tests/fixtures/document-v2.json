@@ -48,6 +48,30 @@
     "accepted": false
   },
   {
+    "name": "document save as unicode copy",
+    "type": "DocumentSaveAsRequest",
+    "value": {
+      "version": 2,
+      "id": "document-save-as",
+      "clientSequence": 10,
+      "method": "document.saveAs",
+      "params": { "fileId": "章节/冲突副本.tex", "content": "保留编辑", "utf8Bom": true }
+    },
+    "accepted": true
+  },
+  {
+    "name": "document save as requires BOM flag",
+    "type": "DocumentSaveAsRequest",
+    "value": {
+      "version": 2,
+      "id": "document-save-as",
+      "clientSequence": 10,
+      "method": "document.saveAs",
+      "params": { "fileId": "copy.tex", "content": "copy" }
+    },
+    "accepted": false
+  },
+  {
     "name": "document open response",
     "type": "DocumentOpenResponse",
     "value": {
@@ -70,6 +94,19 @@
       "ok": true,
       "method": "document.save",
       "result": { "fileId": "main.tex", "revision": "def-456" }
+    },
+    "accepted": true
+  },
+  {
+    "name": "document save as response",
+    "type": "DocumentSaveResponse",
+    "value": {
+      "version": 2,
+      "id": "document-save-as",
+      "clientSequence": 10,
+      "ok": true,
+      "method": "document.saveAs",
+      "result": { "fileId": "章节/冲突副本.tex", "revision": "copy-456" }
     },
     "accepted": true
   }

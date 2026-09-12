@@ -1,0 +1,13 @@
+add_library(lol_build_inbound INTERFACE)
+target_include_directories(lol_build_inbound INTERFACE inbound/include)
+target_link_libraries(lol_build_inbound INTERFACE lol_kernel)
+lol_register(lol_build_inbound inbound build)
+
+add_library(lol_build_outbound INTERFACE)
+target_include_directories(lol_build_outbound INTERFACE outbound/include)
+target_link_libraries(lol_build_outbound INTERFACE lol_kernel)
+lol_register(lol_build_outbound outbound build)
+
+add_library(lol_build_app STATIC src/kbuilds.cpp)
+target_link_libraries(lol_build_app PRIVATE lol_build_domain lol_build_inbound lol_build_outbound)
+lol_register(lol_build_app app build)

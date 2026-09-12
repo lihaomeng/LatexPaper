@@ -35,6 +35,13 @@ struct KStoredWorkspace
     std::string m_revision;
     std::vector<KStoredWorkspaceEntry> m_entries;
 };
+struct KStoredTrashEntry
+{
+    std::string m_trashId;
+    std::string m_originalFileId;
+    bool m_directory = false;
+    std::uint64_t m_deletedAtUnixMs = 0;
+};
 class IKWorkspaceStore
 {
 public:
@@ -48,5 +55,11 @@ public:
         std::stop_token stop) = 0;
     virtual KResult<bool> mutateDirectory(const std::string& selection,
         const KStoredDirectoryMutation& command, std::stop_token stop) = 0;
+    virtual KResult<std::vector<KStoredTrashEntry>> listTrash(const std::string& selection,
+        const std::string& workspaceId, std::stop_token stop) = 0;
+    virtual KResult<bool> restoreTrash(const std::string& selection, const std::string& workspaceId,
+        const std::string& trashId, std::stop_token stop) = 0;
+    virtual KResult<bool> pollChanges(const std::string& selection, const std::string& workspaceId,
+        std::stop_token stop) = 0;
 };
 }

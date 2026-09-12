@@ -29,6 +29,8 @@ def validate(records, source):
                     continue  # Local adapter hashes revisions and creates unpredictable sibling temp names.
                 if node['name'] == 'lol_workspace_adapter_localfs' and link == 'bcrypt':
                     continue  # Local workspace adapter hashes opaque roots and deterministic tree revisions.
+                if node['name'] in {'lol_preferences_adapter_sqlite', 'lol_session_adapter_sqlite'} and link.lower().replace('\\', '/').endswith('/sqlite3.lib'):
+                    continue  # SQLite is private to the two persistence adapters.
                 allowed = layer in {'platform', 'bootstrap', 'composition', 'transport'} and link in (external.get(module, set()) if layer != 'composition' else {'libcef_lib', 'libcef_dll_wrapper'})
             else:
                 target_layer = other['layer']

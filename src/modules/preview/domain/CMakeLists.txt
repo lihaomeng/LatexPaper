@@ -1,0 +1,4 @@
+add_library(lol_preview_domain STATIC src/kpreviewpolicy.cpp)
+target_include_directories(lol_preview_domain PUBLIC include)
+target_link_libraries(lol_preview_domain PUBLIC lol_kernel)
+lol_register(lol_preview_domain domain preview)

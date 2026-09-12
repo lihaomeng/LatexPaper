@@ -6,13 +6,15 @@ import { LocalDocumentSaveError, saveLocalDocuments } from '../src/app/saveLocal
 function fixture() {
   let content = '本地未保存内容', version = 4;
   const session = {
-    recoverySnapshot: () => ({ content, version }),
+    recoverySnapshot: () => ({ content, baseContent: '上次保存内容', version }),
     replaceFromDisk: (_path: string, next: string, expected: number) => {
       if (version !== expected) return false;
       content = next; version++; return true;
     },
   };
-  const reader = { openDocument: async (fileId: string) => ({ fileId, content: '磁盘内容', revision: 'r2' }) };
+  const reader = { openDocument: async (fileId: string) => ({
+    fileId, content: '磁盘内容', revision: 'r2', utf8Bom: true,
+  }) };
   return { session, reader, revisions: new Map([['正文.tex', 'r1']]),
     edit: () => { content = '稍后输入'; version++; } };
 }
@@ -20,6 +22,8 @@ function fixture() {
 test('comparison is read-only until explicit adoption, which updates the revision', async () => {
   const f = fixture();
   const comparison = await compareDocument(f.session, '正文.tex', f.reader, () => true);
+  assert.equal(comparison.diskUtf8Bom, true);
+  assert.equal(comparison.baseContent, '上次保存内容');
   assert.equal(f.session.recoverySnapshot().content, '本地未保存内容');
   assert.equal(f.revisions.get('正文.tex'), 'r1');
   adoptDiskVersion(f.session, comparison, f.revisions, () => true);

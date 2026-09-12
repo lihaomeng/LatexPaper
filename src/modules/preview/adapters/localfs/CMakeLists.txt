@@ -1,0 +1,5 @@
+add_library(lol_preview_adapter_localfs STATIC src/klocalartifactstore.cpp)
+target_include_directories(lol_preview_adapter_localfs PUBLIC include)
+target_compile_definitions(lol_preview_adapter_localfs PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(lol_preview_adapter_localfs PUBLIC lol_preview_outbound PRIVATE lol_preview_domain)
+lol_register(lol_preview_adapter_localfs adapter preview)

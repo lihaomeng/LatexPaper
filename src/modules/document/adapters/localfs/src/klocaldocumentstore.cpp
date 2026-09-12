@@ -119,6 +119,50 @@ KResult<std::filesystem::path> resolveExisting(const std::filesystem::path& root
     return canonical;
 }
 
+KResult<std::filesystem::path> resolveNew(const std::filesystem::path& root,
+    const std::string& fileId)
+{
+    if (!validFileId(fileId))
+        return error(KErrorCode::InvalidArgument, "document.invalidArgument");
+    std::wstring relative;
+    if (!toWide(fileId, relative))
+        return error(KErrorCode::InvalidArgument, "document.invalidArgument");
+    std::replace(relative.begin(), relative.end(), L'/', L'\\');
+    const std::size_t separator = relative.find_last_of(L'\\');
+    const std::wstring parentText = separator == std::wstring::npos ?
+        std::wstring{} : relative.substr(0, separator);
+    const std::wstring leaf = separator == std::wstring::npos ?
+        relative : relative.substr(separator + 1);
+    std::filesystem::path current = root;
+    std::size_t start = 0;
+    while (start < parentText.size())
+    {
+        const std::size_t next = parentText.find(L'\\', start);
+        const std::size_t end = next == std::wstring::npos ? parentText.size() : next;
+        current /= parentText.substr(start, end - start);
+        const DWORD attributes = GetFileAttributesW(current.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES)
+            return error(GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND ?
+                KErrorCode::NotFound : KErrorCode::Unavailable, "document.parentUnavailable", true);
+        if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 ||
+            (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            return error(KErrorCode::InvalidArgument, "document.pathOutsideWorkspace");
+        if (next == std::wstring::npos) break;
+        start = next + 1;
+    }
+    std::error_code filesystemError;
+    const std::filesystem::path parent = std::filesystem::canonical(current, filesystemError);
+    if (filesystemError || !withinRoot(root, parent))
+        return error(KErrorCode::InvalidArgument, "document.pathOutsideWorkspace");
+    const std::filesystem::path target = parent / leaf;
+    if (GetFileAttributesW(target.c_str()) != INVALID_FILE_ATTRIBUTES)
+        return error(KErrorCode::Conflict, "document.targetExists");
+    const DWORD missing = GetLastError();
+    if (missing != ERROR_FILE_NOT_FOUND && missing != ERROR_PATH_NOT_FOUND)
+        return error(KErrorCode::Unavailable, "document.targetUnavailable", true);
+    return target;
+}
+
 KResult<std::string> sha256(const std::vector<unsigned char>& bytes)
 {
     BCRYPT_ALG_HANDLE algorithm = nullptr;
@@ -297,6 +341,51 @@ public:
         KResult<std::string> revision = sha256(bytes);
         if (const KError* failure = std::get_if<KError>(&revision)) return *failure;
         return KStoredDocument{content, std::move(std::get<std::string>(revision)), bom};
+    }
+    KResult<KStoredDocument> createExclusive(const std::string& fileId,
+        const std::string& content, bool utf8Bom, std::stop_token stop) override
+    {
+        if (!validFileId(fileId) || content.size() > m_maxBytes || !validUtf8(content))
+            return error(KErrorCode::InvalidArgument, "document.invalidArgument");
+        if (stop.stop_requested())
+            return error(KErrorCode::Cancelled, "document.cancelled", true);
+        std::lock_guard<std::mutex> lock(m_mutex);
+        KResult<std::filesystem::path> resolved = resolveNew(m_root, fileId);
+        if (const KError* failure = std::get_if<KError>(&resolved)) return *failure;
+        const std::filesystem::path target = std::get<std::filesystem::path>(resolved);
+        KScopedHandle parent(CreateFileW(target.parent_path().c_str(), FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+        BY_HANDLE_FILE_INFORMATION parentInfo{};
+        if (!parent.valid() || !GetFileInformationByHandle(parent.get(), &parentInfo) ||
+            (parentInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 ||
+            (parentInfo.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            return error(KErrorCode::InvalidArgument, "document.pathOutsideWorkspace");
+        std::vector<unsigned char> bytes;
+        bytes.reserve(content.size() + (utf8Bom ? 3 : 0));
+        if (utf8Bom) bytes.insert(bytes.end(), {0xEF, 0xBB, 0xBF});
+        bytes.insert(bytes.end(), content.begin(), content.end());
+        KScopedHandle tempHandle;
+        KResult<std::filesystem::path> tempResult = createSiblingTemp(target, tempHandle);
+        if (const KError* failure = std::get_if<KError>(&tempResult)) return *failure;
+        const std::filesystem::path temp = std::get<std::filesystem::path>(tempResult);
+        KTempFileGuard cleanup(temp);
+        KResult<bool> writeResult = writeRaw(tempHandle.get(), bytes, stop);
+        if (const KError* failure = std::get_if<KError>(&writeResult)) return *failure;
+        CloseHandle(tempHandle.release());
+        if (stop.stop_requested())
+            return error(KErrorCode::Cancelled, "document.cancelled", true);
+        if (!MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_WRITE_THROUGH))
+        {
+            const DWORD code = GetLastError();
+            if (code == ERROR_FILE_EXISTS || code == ERROR_ALREADY_EXISTS)
+                return error(KErrorCode::Conflict, "document.targetExists");
+            return error(KErrorCode::Unavailable, "document.createFailure", true);
+        }
+        cleanup.commit();
+        KResult<std::string> revision = sha256(bytes);
+        if (const KError* failure = std::get_if<KError>(&revision)) return *failure;
+        return KStoredDocument{content, std::move(std::get<std::string>(revision)), utf8Bom};
     }
 
 private:

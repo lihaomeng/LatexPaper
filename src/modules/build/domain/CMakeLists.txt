@@ -1,0 +1,4 @@
+add_library(lol_build_domain STATIC src/kbuildpolicy.cpp)
+target_include_directories(lol_build_domain PUBLIC include)
+target_link_libraries(lol_build_domain PRIVATE lol_kernel)
+lol_register(lol_build_domain domain build)

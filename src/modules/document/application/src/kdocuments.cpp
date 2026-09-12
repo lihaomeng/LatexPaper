@@ -58,6 +58,32 @@ public:
             return internal();
         }
     }
+    KResult<KDocumentSaved> saveAs(const KSaveDocumentAs& command, std::stop_token stop) override
+    {
+        if (!validFileId(command.m_fileId) || command.m_clientSequence > 9007199254740991ULL)
+            return invalid();
+        if (command.m_content.size() > kMaxDocumentBytes)
+            return KError{KErrorCode::ResourceExhausted, "document.tooLarge", false};
+        if (!validUtf8(command.m_content))
+            return KError{KErrorCode::InvalidEncoding, "document.invalidEncoding", false};
+        if (stop.stop_requested()) return cancelled();
+        try
+        {
+            KResult<KStoredDocument> result = m_store->createExclusive(
+                command.m_fileId, command.m_content, command.m_utf8Bom, stop);
+            if (const KError* error = std::get_if<KError>(&result)) return *error;
+            KStoredDocument& value = std::get<KStoredDocument>(result);
+            if (!validStored(value) || value.m_content != command.m_content ||
+                value.m_utf8Bom != command.m_utf8Bom)
+                return internal();
+            return KDocumentSaved{command.m_fileId, std::move(value.m_revision),
+                command.m_clientSequence};
+        }
+        catch (...)
+        {
+            return internal();
+        }
+    }
 
 private:
     std::shared_ptr<IKDocumentStore> m_store;

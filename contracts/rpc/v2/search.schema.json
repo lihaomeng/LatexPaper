@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lightoverleaf:rpc:v2:search",
+  "$defs": {
+    "SearchStartRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "method", "params"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "method": { "type": "string", "const": "search.start" },
+        "params": { "type": "object", "additionalProperties": false,
+          "required": ["query", "caseSensitive", "maxResults"], "properties": {
+            "query": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 512 },
+            "caseSensitive": { "type": "boolean" },
+            "maxResults": { "type": "integer", "minimum": 1, "maximum": 500 }
+          } }
+      }
+    },
+    "SearchStartResponse": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "ok": { "type": "boolean", "const": true },
+        "method": { "type": "string", "const": "search.start" },
+        "result": { "type": "object", "additionalProperties": false,
+          "required": ["hits", "truncated"], "properties": {
+            "hits": { "type": "array", "minItems": 0, "maxItems": 500,
+              "items": { "type": "object", "additionalProperties": false,
+                "required": ["fileId", "line", "column", "preview"], "properties": {
+                  "fileId": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 4096 },
+                  "line": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                  "column": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+                  "preview": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 512 }
+                } }
+            },
+            "truncated": { "type": "boolean" }
+          } }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/SearchStartRequest" },
+    { "$ref": "#/$defs/SearchStartResponse" }
+  ]
+}

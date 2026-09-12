@@ -1,0 +1,4 @@
+add_library(lol_navigation_adapter_unavailable STATIC src/kunavailablesynctexbackend.cpp)
+target_include_directories(lol_navigation_adapter_unavailable PUBLIC include)
+target_link_libraries(lol_navigation_adapter_unavailable PUBLIC lol_navigation_outbound)
+lol_register(lol_navigation_adapter_unavailable adapter navigation)

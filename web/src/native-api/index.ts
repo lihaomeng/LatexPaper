@@ -1,6 +1,9 @@
 import { validatePing, type PingRequest, type NativeApi } from "../../.generated/rpc/contract";
 export { createSystemConnection, SystemRpcClient, CefSystemTransport, FakeSystemTransport } from './system';
 export { WorkspaceRpcClient } from './workspace';
+export { AuthoringRpcClient } from './authoring';
+export { PreferencesSessionRpcClient } from './preferencesSession';
+export type { Preferences, SessionSnapshot } from './preferencesSession';
 export { RpcEventCursor } from './events';
 export { NativeEventSubscription, createNativeEvents } from './subscription';
 export { CancellationRpcClient } from './cancellation';

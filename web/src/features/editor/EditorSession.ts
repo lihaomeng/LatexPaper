@@ -6,7 +6,7 @@ export interface EditorView {
   files: { path: string; dirty: boolean }[]; open: string[]; active: string | null;
   outline: OutlineEntry[]; revision: number; line: number; column: number;
 }
-interface Entry { model: monaco.editor.ITextModel; savedVersion: number; listener: monaco.IDisposable }
+interface Entry { model: monaco.editor.ITextModel; savedVersion: number; savedContent: string; listener: monaco.IDisposable }
 export class EditorSession {
   private readonly modelNamespace = crypto.randomUUID();
   private files = new Map<string, Entry>();
@@ -29,7 +29,7 @@ export class EditorSession {
       monaco.Uri.parse("inmemory://session-" + this.modelNamespace + "/" + encodeURIComponent(path)));
     model.updateOptions({ tabSize: 2, insertSpaces: true });
     const listener = model.onDidChangeContent(() => this.emit(true));
-    this.files.set(path, { model, savedVersion: model.getAlternativeVersionId(), listener });
+    this.files.set(path, { model, savedVersion: model.getAlternativeVersionId(), savedContent: content, listener });
   }
   private buildView(): EditorView {
     const model = this.active ? this.files.get(this.active)!.model : null;
@@ -50,7 +50,7 @@ export class EditorSession {
   model(path: string) { return this.files.get(path)?.model ?? null; }
   recoverySnapshot(path: string) {
     const entry = this.files.get(path);
-    return entry ? { content: entry.model.getValue(), version: entry.model.getVersionId(),
+    return entry ? { content: entry.model.getValue(), baseContent: entry.savedContent, version: entry.model.getVersionId(),
       dirty: entry.model.getAlternativeVersionId() !== entry.savedVersion } : null;
   }
   replaceFromDisk(path: string, content: string, expectedVersion: number): boolean {
@@ -60,6 +60,16 @@ export class EditorSession {
     entry.model.pushEditOperations([], [{ range: entry.model.getFullModelRange(), text: content }], () => null);
     entry.model.pushStackElement();
     entry.savedVersion = entry.model.getAlternativeVersionId();
+    entry.savedContent = content;
+    this.emit(true);
+    return true;
+  }
+  replaceForMerge(path: string, content: string, expectedVersion: number): boolean {
+    const entry = this.files.get(path);
+    if (!entry || entry.model.getVersionId() !== expectedVersion) return false;
+    entry.model.pushStackElement();
+    entry.model.pushEditOperations([], [{ range: entry.model.getFullModelRange(), text: content }], () => null);
+    entry.model.pushStackElement();
     this.emit(true);
     return true;
   }
@@ -103,6 +113,19 @@ export class EditorSession {
     if (this.active === path) this.active = destination;
     this.emit(true);
   }
+  renameSaved(path: string, destination: string, expectedVersion: number): boolean {
+    const entry = this.files.get(path);
+    if (!entry || this.files.has(destination) || entry.model.getVersionId() !== expectedVersion)
+      return false;
+    this.files.delete(path);
+    this.files.set(destination, entry);
+    this.open = this.open.map(item => item === path ? destination : item);
+    if (this.active === path) this.active = destination;
+    entry.savedVersion = entry.model.getAlternativeVersionId();
+    entry.savedContent = entry.model.getValue();
+    this.emit(true);
+    return true;
+  }
   forget(path: string) {
     const entry = this.files.get(path);
     if (!entry) return;
@@ -124,10 +147,15 @@ export class EditorSession {
       revision: this.revision,
     };
   }
-  acknowledge(versions: Map<string, number>) {
+  acknowledge(versions: Map<string, number>, contents?: Map<string, string>) {
     for (const [path, version] of versions) {
       const entry = this.files.get(path);
-      if (entry) entry.savedVersion = version;
+      if (entry) {
+        entry.savedVersion = version;
+        const saved = contents?.get(path);
+        if (saved !== undefined) entry.savedContent = saved;
+        else if (entry.model.getAlternativeVersionId() === version) entry.savedContent = entry.model.getValue();
+      }
     }
     this.emit(false);
   }

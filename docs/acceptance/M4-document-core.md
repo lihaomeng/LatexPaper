@@ -1,6 +1,6 @@
 # M4 文档核心增量记录
 
-日期：2026-09-11，最新验证：2026-09-12。状态：进行中，未完成 M4 整体验收。
+日期：2026-09-11，最新验证：2026-09-12。状态：自动化实现完成；环境边界与人工验收保留。
 
 ## 已实现
 
@@ -157,3 +157,63 @@ M4 剩余项：目录创建/管理、原生实时文件监视、回收站恢复�
 中途新增的 Workspace 单测曾错误地从两个临时状态快照取得 `begin/end`，导致未定义行为和超时；已改为持有单一快照后遍历，目标单测及上述全量回归均通过。
 
 最新剩余项：原生实时文件监视、回收站恢复界面与原路径索引、冲突合并/另存、真实桌面视觉与中文 IME 人工验收、4 MiB 真实跨进程边界、Reparse Point 实物夹具、极端长路径和崩溃中断。外部工具在目录操作前后制造的未扫描条目可能要到下一次 5 秒刷新才出现在树中。M4 保持进行中。
+
+## 2026-09-12：冲突原子另存副本
+
+状态：冲突另存增量已实现并完成自动化回归，M4 整体验收仍进行中。
+
+- Document 模块新增独立 `saveAs` Inbound Command 和 `createExclusive` Outbound Store；普通 Revision 保存语义不变，Workspace/Document 仍可独立替换。
+- `document.saveAs` 已进入 V2 Schema、生成代码、共享 Fixture、RPC Handler、Workflow 和 Composition。V2 共享 Fixture 共 137 项，代码生成漂移检查通过。
+- Windows LocalFS 在目标父目录写入隐藏临时文件，写入可选 UTF-8 BOM 并 Flush 后，以非覆盖同目录移动提交。目标已存在或并发出现时返回 `FILE_CONFLICT`，原内容保持不变；提前取消不生成目标，提交后晚到取消不伪报失败。
+- React 冲突对话框增加副本相对路径与“另存副本”。协调器只发送一次原子 RPC；保存期间继续编辑、模型退休或会话切换时，已落盘副本不会反向替换当前编辑内容。
+- 安全时复用并重新键控原 Monaco 模型，不额外占用第 33 个模型名额。另存成功后显式刷新 Workspace；刷新失败与无法确认提交使用独立提示，不自动重试可能已提交的写操作。
+- 架构与部分提交语义见 ADR 0010。未引入前端文件系统访问、CEF 业务逻辑或跨模块 Store 依赖。
+
+本增量最终验证（工作目录为仓库根，前端命令在 `web`）：
+
+| 命令/范围 | 结果 |
+| --- | --- |
+| `cmake --preset core-debug`、构建及 `ctest --preset core-debug --output-on-failure` | 退出码 0；15/15 通过，8.17s |
+| `npm.cmd run check` | 退出码 0；271/271 通过；ESLint、TypeScript 与 Vite 构建通过 |
+| `cmake --build --preset desktop-release -- /verbosity:quiet` | 退出码 0；Schema 变化触发重新配置，Release 运行目录已更新 |
+| `ctest --preset desktop-release --output-on-failure` | 退出码 0；25/25 通过，19.73s |
+
+测试覆盖成功与响应关联、Fake Store 替换、目标冲突、提前/晚到取消、中文路径、BOM、缺失父目录、响应错配、并发编辑、旧会话隔离，以及真实 CEF Composition 经 LocalFS 创建副本并验证原始字节不被覆盖。Vite 仍报告约 3.50 MiB 主块体积警告。
+
+Release 入口为 `out/desktop-release/bin/Release/LightOverLeaf.exe`；运行时必须保留同目录 `LightOverLeaf.dll`、CEF/Qt 和 `web` 资源。本增量更新可直接运行的 Release 目录，未重打历史自解压包。
+
+M4 最新剩余项：原生实时文件监视、回收站恢复界面与原路径索引、冲突三方合并、真实桌面视觉与中文 IME 人工验收、4 MiB 真实跨进程边界、Reparse Point 实物夹具、极端长路径和崩溃中断。M4 保持进行中，不据此提前启动 M5 验收。
+
+## 2026-09-12：带索引回收恢复与三方合并
+
+状态：实现和自动化回归完成，M4 仍进行中。
+
+- Workspace 新增独立回收列表/恢复 Inbound、Outbound、Workflow 和 V2 RPC，V2 共享 Fixture 增至 140 项。
+- LocalFS 删除生成随机 Trash ID、正文 `.payload` 与隐藏 `.restore` 索引，记录原始相对路径、文件/目录类型和删除时间。列表忽略损坏、缺失或 Reparse Point 项，最多返回 1000 项。
+- 恢复使用非覆盖句柄移动，只回到原路径；同名目标不覆盖，恢复令牌单次有效。React 增加项目回收站列表和恢复入口。
+- EditorSession 保存最近一次真实持久化正文。冲突窗口生成三方合并草稿；独立行修改自动合并，同一行双向修改或行数变化保守地产生冲突标记，全部清理后才能应用。
+- 架构与恢复格式见 ADR 0011。旧版无索引回收项继续保留但只能人工恢复。
+
+本增量验证：`npm.cmd run check` 279/279 通过，ESLint、TypeScript、Vite 通过；core-debug 15/15 通过；desktop-release 25/25 通过，18.93s。Composition 经真实 CEF/LocalFS 删除、列出、恢复并核对正文原始字节。Vite 仍有约 3.51 MiB 主块警告。
+
+剩余：原生实时文件监视、4 MiB 真实跨进程边界、Reparse Point/长路径/崩溃中断夹具，以及 CEF 桌面视觉和中文 IME 人工验收。M4 尚未整体验收。
+
+## 2026-09-12：Windows 原生变化通知
+
+状态：实现和自动化回归完成，M4 的自动刷新不再执行固定周期全量扫描。
+
+- Workspace 新增可替换 `pollChanges` Inbound/Outbound；LocalFS 使用 `FindFirstChangeNotificationW` 监视根目录和全部子目录，句柄在切换项目、关闭和析构时释放。
+- 新增 `workspace.pollChanges` V2 RPC，V2 Fixture 共 142 项。React 每秒读取轻量布尔信号，只有收到变化才调用既有安全刷新；监视失败仍保留手动刷新。
+- 原生通知允许合并多项变化，业务层不依赖具体 Win32 事件路径，Dirty、并发编辑和已退休会话保护继续由刷新协调器负责。
+- 设计见 ADR 0012。
+
+验证：`npm.cmd run check` 282/282 通过；core-debug 相关重建与测试通过；desktop-release 全量 25/25 通过，18.63s。LocalFS 测试在真实临时目录写入新文件，验证通知触发、批量信号排空和生命周期。
+
+M4 仍需 4 MiB 真实跨进程、特权 Reparse Point/极端长路径、崩溃中断，以及真实 CEF 中文 IME/视觉人工验收。自动化能力实现不等同于这些环境验收完成。
+
+## 2026-09-12：后续阶段完成后的最终回归
+
+- M5～M8 合入后重新配置完整 Release；架构检查通过，共 85 个显式 Target。
+- 前端 `npm.cmd run check` 为 287/287，通过 ESLint、TypeScript 和 Vite 构建。
+- 最终 `ctest --test-dir out/desktop-release -C Release --output-on-failure` 为 31/31，通过 Desktop Smoke、Renderer Recovery、真实 CEF Composition、Workspace/Document、架构、非法依赖与生成漂移测试。
+- M4 的业务实现与自动化回归已完成；当前未关闭的均需真实可见桌面、特权文件系统、极值跨进程或崩溃注入环境。未取得这些条件，不将其表述为人工/环境验收通过。

@@ -1,14 +1,14 @@
 # LightOverLeaf
 
-Windows 本地 LaTeX 编辑器。已建立 Qt/CEF 外壳、深色三栏工作台、Monaco 多标签和基础本地项目打开、编辑及保存。M4 整体验收仍进行中，TeX 编译和 PDF 预览尚未接入，不适合正式写作。
+Windows 本地 LaTeX 编辑器。Qt/CEF 外壳、React 深色三栏工作台、Monaco 多标签、本地项目、搜索、可取消 TeX 编译、PDF.js 预览、SyncTeX 适配器、SQLite 偏好与会话恢复均已接入。无 TeX 时应用会明确报告编译与 SyncTeX 不可用，不生成伪造结果。
 
-当前进展与阻塞见 [三栏工作台验收记录](docs/acceptance/M2-draft-workbench.md)。草稿缓存不是项目文件保存；清除应用缓存可能丢失草稿。
+当前进展、自动化证据和外部环境阻塞见 [阶段进度](docs/development/阶段进度.md)。最新 Lite 单文件 EXE 见 [M8 发布记录](docs/acceptance/M8-release.md)。
 
 按 M0 → M8 顺序执行的状态、阻塞与本地记录入口见 [阶段进度](docs/development/阶段进度.md)。
 
 M3 System RPC 基线已通过：纯 C++ 会话端点、Loopback/CEF 共用替换场景、真实跨进程取消、重载隔离与 V1 兼容；见 [最新 M3 记录](docs/acceptance/M3-endpoint-substitution.md)。进入 M4；M2 未验收项仍保留。
 
-M4 已通过原生目录选择、业务 RPC 和有界 Worker 接入独立的 Workspace/Document Adapter，nativeFiles 为 true。支持本地编辑、多文件保存、冲突对比与采用磁盘版本、普通文件及目录的新建/重命名/可恢复删除，以及可见窗口下每 5 秒自动检查和手动刷新外部文件变化。刷新只重载已打开且未修改的模型，不覆盖未保存或并发编辑内容；空目录可在文件树中显示和选择。删除内容位于项目内 `.lightoverleaf-trash`。原生实时文件监视、回收站恢复界面、冲突合并/另存和人工验收仍待完成，详见 [M4 记录](docs/acceptance/M4-document-core.md)。
+M4 已通过原生目录选择、业务 RPC 和有界 Worker 接入独立的 Workspace/Document Adapter，`nativeFiles=true`。支持多文件保存、冲突对比/三方合并、原子非覆盖另存、文件与目录管理、带索引的项目回收恢复，以及 Windows 原生变化通知驱动的安全刷新。剩余项仅是 4 MiB 真实跨进程极值、特权 Reparse Point/极端长路径/崩溃中断夹具和可见桌面中文 IME 人工验收；详见 [M4 记录](docs/acceptance/M4-document-core.md)。
 
 ## 构建
 
@@ -43,7 +43,7 @@ CEF 路径可单独通过 `CEF_ROOT` 覆盖；Qt 可通过 `Qt5_DIR` 指定。
 
 ## 开发版 EXE 打包
 
-在 PowerShell 运行 `./scripts/package.ps1`，生成自解压 EXE；已有最新 Release 时可加 `-SkipBuild`。输出位于 `out/packages/`，附带归档与解压启动验证结果。它不是正式安装向导，不代表 M8 完成。详见 [打包说明](docs/development/打包说明.md)。
+在 PowerShell 运行 `./scripts/package-lite.ps1`，生成可直接运行的 Lite 单文件 EXE；已有最新 Release 时可加 `-SkipBuild`。输出位于 `out/packages/`，附带清单、哈希和解压启动验证结果。Full 包需显式提供 Portable TeX 根目录；详见 [M8 发布记录](docs/acceptance/M8-release.md)。
 
 ## 前端独立开发
 

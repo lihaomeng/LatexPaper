@@ -28,11 +28,24 @@ public:
         if (m_afterCommit) m_afterCommit->request_stop();
         return m_value;
     }
+    KResult<KStoredDocument> createExclusive(const std::string& fileId,
+        const std::string& content, bool utf8Bom, std::stop_token stop) override
+    {
+        ++m_creates;
+        if (stop.stop_requested())
+            return KError{KErrorCode::Cancelled, "document.cancelled", true};
+        if (fileId == "existing.tex")
+            return KError{KErrorCode::Conflict, "document.targetExists", false};
+        KStoredDocument created{content, "created-" + std::to_string(++m_revision), utf8Bom};
+        if (m_afterCommit) m_afterCommit->request_stop();
+        return created;
+    }
 
 public:
     KStoredDocument m_value{"original", "revision-1", true};
     unsigned int m_reads = 0;
     unsigned int m_writes = 0;
+    unsigned int m_creates = 0;
     unsigned int m_revision = 1;
     bool m_throw = false;
     std::stop_source* m_afterCommit = nullptr;
@@ -62,6 +75,14 @@ int main()
     check(store->m_reads == 1 && store->m_writes == 1, "save delegates one compare-and-replace without read");
     check(failed(documents->save({"chapter/main.tex", "overwrite", "revision-1", 43}), KErrorCode::Conflict), "stale revision");
     check(store->m_value.m_content == "new content", "conflict never overwrites");
+    const KResult<KDocumentSaved> copied = documents->saveAs(
+        {"chapter/copy.tex", "copy content", true, 45});
+    check(std::holds_alternative<KDocumentSaved>(copied) &&
+        std::get<KDocumentSaved>(copied).m_fileId == "chapter/copy.tex" &&
+        std::get<KDocumentSaved>(copied).m_clientSequence == 45,
+        "save as delegates exclusive create");
+    check(failed(documents->saveAs({"existing.tex", "copy", false, 46}),
+        KErrorCode::Conflict), "save as conflict propagated");
     for (const auto* path : {"../escape.tex", "/root.tex", "C:/a.tex", "a\\b.tex", "a//b.tex", "a/./b.tex", "a/", "a. /b"})
         check(failed(documents->open(path), KErrorCode::InvalidArgument), "invalid relative path");
     check(validFileId("章节/正文.tex"), "UTF-8 relative name");
@@ -74,12 +95,21 @@ int main()
     std::stop_source stop;
     stop.request_stop();
     const auto writes = store->m_writes;
+    const auto creates = store->m_creates;
     check(failed(documents->save({"main.tex", "no", "revision-2", 0}, stop.get_token()), KErrorCode::Cancelled), "early cancellation");
     check(store->m_writes == writes, "cancel avoids store");
+    check(failed(documents->saveAs({"copy.tex", "no", false, 0}, stop.get_token()),
+        KErrorCode::Cancelled), "save as early cancellation");
+    check(store->m_creates == creates, "save as cancellation avoids store");
     std::stop_source late;
     store->m_afterCommit = &late;
     check(std::holds_alternative<KDocumentSaved>(documents->save({"main.tex", "committed", "revision-2", 44}, late.get_token())),
         "late cancellation preserves successful commit");
+    std::stop_source lateCreate;
+    store->m_afterCommit = &lateCreate;
+    check(std::holds_alternative<KDocumentSaved>(documents->saveAs(
+        {"late-copy.tex", "committed copy", false, 47}, lateCreate.get_token())),
+        "save as late cancellation preserves successful commit");
     store->m_throw = true;
     check(failed(documents->open("main.tex"), KErrorCode::Internal), "adapter exception mapped");
     check(!createDocuments(nullptr), "missing store rejected");

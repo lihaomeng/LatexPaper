@@ -16,6 +16,12 @@ public:
     KResult<bool> mutate(const std::string&, const KStoredMutation&, std::stop_token) override { return true; }
     KResult<bool> mutateDirectory(const std::string&, const KStoredDirectoryMutation&,
         std::stop_token) override { return true; }
+    KResult<std::vector<KStoredTrashEntry>> listTrash(const std::string&, const std::string&,
+        std::stop_token) override { return m_trash; }
+    KResult<bool> restoreTrash(const std::string&, const std::string&,
+        const std::string&, std::stop_token) override { return true; }
+    KResult<bool> pollChanges(const std::string&, const std::string&,
+        std::stop_token) override { return m_changed; }
     KResult<KStoredWorkspace> refresh(const std::string&, const std::string&, std::stop_token stop) override
     {
         ++m_refreshes;
@@ -43,6 +49,8 @@ public:
     unsigned int m_refreshes = 0;
     bool m_throw = false;
     bool m_refreshFailure = false;
+    std::vector<KStoredTrashEntry> m_trash;
+    bool m_changed = false;
     std::stop_source* m_afterOpen = nullptr;
 };
 template<class T> bool failed(const KResult<T>& result, KErrorCode code)
@@ -68,6 +76,11 @@ int main()
         const KWorkspaceState& state = std::get<KWorkspaceState>(opened);
         check(state.m_entries.size() == 3 && state.m_entries[0].m_directory &&
             state.m_entries[1].m_fileId == "a.tex", "deterministic projection");
+        store->m_trash = {{"0123456789abcdef0123456789abcdef", "旧稿.tex", false, 100}};
+        const KResult<std::vector<KWorkspaceTrashEntry>> trash = workspaces->listTrash("workspace-1");
+        check(std::holds_alternative<std::vector<KWorkspaceTrashEntry>>(trash) &&
+            std::get<std::vector<KWorkspaceTrashEntry>>(trash)[0].m_originalFileId == "旧稿.tex",
+            "trash projection through fake store");
         check(workspaces->state() && workspaces->state()->m_displayName == "中文项目", "state snapshot");
         store->m_value = {"workspace-2", "next", "revision-2", {}};
         check(std::holds_alternative<KWorkspaceState>(workspaces->open("next-selection")), "replace active workspace");
@@ -144,6 +157,16 @@ int main()
     check(std::holds_alternative<KWorkspaceState>(managed->mutateDirectory(
         {KWorkspaceDirectoryMutationKind::Remove, "workspace-1", "chapters", ""})) &&
         managed->state()->m_entries.size() == 4, "directory remove projects descendants");
+    mutationStore->m_trash = {{"0123456789abcdef0123456789abcdef", "restored.tex", false, 100}};
+    mutationStore->m_refreshFailure = true;
+    const KResult<KWorkspaceState> restoredWithoutRefresh = managed->restoreTrash(
+        {"workspace-1", "0123456789abcdef0123456789abcdef"});
+    const std::optional<KWorkspaceState> restoredState = managed->state();
+    check(std::holds_alternative<KWorkspaceState>(restoredWithoutRefresh) && restoredState &&
+        std::any_of(restoredState->m_entries.begin(), restoredState->m_entries.end(),
+            [](const KWorkspaceEntry& entry) { return entry.m_fileId == "restored.tex"; }),
+        "committed restore is not reported as failed when post-commit refresh fails");
+    mutationStore->m_refreshFailure = false;
     for (const std::string& invalidName : {"CON.tex", "aux.txt", "LPT1", "COM¹.tex", "wild*.tex"})
         check(!validWorkspaceFileId(invalidName), "reserved device or wildcard rejected");
     return failures == 0 ? 0 : 1;

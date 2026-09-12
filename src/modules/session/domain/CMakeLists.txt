@@ -1,0 +1,4 @@
+add_library(lol_session_domain STATIC src/ksessionpolicy.cpp)
+target_include_directories(lol_session_domain PUBLIC include)
+target_link_libraries(lol_session_domain PUBLIC lol_kernel)
+lol_register(lol_session_domain domain session)

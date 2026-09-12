@@ -35,7 +35,8 @@ export class FakeSystemTransport implements SystemTransport {
 export class SystemRpcClient {
   private readonly pending = new Set<string>();
   constructor(private readonly transport: SystemTransport, private readonly timeoutMs = 5000) {
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60000) throw new Error('INVALID_TIMEOUT');
+    // Build contracts allow 300 s; the transport adds a bounded 5 s response margin.
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 305000) throw new Error('INVALID_TIMEOUT');
   }
 
   async request(request: RpcRequest, signal?: AbortSignal): Promise<Response> {
@@ -102,10 +103,10 @@ export class SystemRpcClient {
   }
 }
 
-export function createSystemConnection(allowFake: boolean): SystemRpcClient {
+export function createSystemConnection(allowFake: boolean, timeoutMs = 5000): SystemRpcClient {
   if (window.cefQuery && window.cefQueryCancel) {
-    return new SystemRpcClient(new CefSystemTransport({ query: window.cefQuery.bind(window), cancel: window.cefQueryCancel.bind(window) }));
+    return new SystemRpcClient(new CefSystemTransport({ query: window.cefQuery.bind(window), cancel: window.cefQueryCancel.bind(window) }), timeoutMs);
   }
-  if (allowFake) return new SystemRpcClient(new FakeSystemTransport());
-  return new SystemRpcClient({ send: () => { throw new Error('TRANSPORT_UNAVAILABLE'); } });
+  if (allowFake) return new SystemRpcClient(new FakeSystemTransport(), timeoutMs);
+  return new SystemRpcClient({ send: () => { throw new Error('TRANSPORT_UNAVAILABLE'); } }, timeoutMs);
 }

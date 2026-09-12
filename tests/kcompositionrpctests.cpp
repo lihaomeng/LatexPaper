@@ -177,13 +177,45 @@ int main()
     reply = manageDirectory(11, "remove", "材料", "");
     check(reply.m_success && !std::filesystem::exists(root / L"材料"),
         "RPC removes directory recoverably");
-    check(write(root / L"外部.tex", "external"), "external tree change fixture");
     reply = exchange(12,
-        R"({"version":2,"id":"refresh-workspace","clientSequence":12,"method":"workspace.refresh","params":{}})");
-    check(reply.m_success && reply.m_payload.find("外部.tex") != std::string::npos,
-        "RPC refresh publishes external tree change");
+        R"({"version":2,"id":"save-copy","clientSequence":12,"method":"document.saveAs","params":{"fileId":"章节/冲突副本.tex","content":"本地保留","utf8Bom":true}})");
+    check(reply.m_success && reply.m_payload.find("document.saveAs") != std::string::npos &&
+        read(root / L"章节" / L"冲突副本.tex") == std::string("\xEF\xBB\xBF") + "本地保留",
+        "RPC save as creates atomic BOM copy");
     reply = exchange(13,
-        R"({"version":2,"id":"close-workspace","clientSequence":13,"method":"workspace.close","params":{}})");
+        R"({"version":2,"id":"save-copy-conflict","clientSequence":13,"method":"document.saveAs","params":{"fileId":"章节/冲突副本.tex","content":"不得覆盖","utf8Bom":false}})");
+    check(reply.m_success && reply.m_payload.find("FILE_CONFLICT") != std::string::npos &&
+        read(root / L"章节" / L"冲突副本.tex") == std::string("\xEF\xBB\xBF") + "本地保留",
+        "RPC save as never overwrites existing copy");
+    check(write(root / L"外部.tex", "external"), "external tree change fixture");
+    reply = exchange(14,
+        R"({"version":2,"id":"refresh-workspace","clientSequence":14,"method":"workspace.refresh","params":{}})");
+    check(reply.m_success && reply.m_payload.find("外部.tex") != std::string::npos &&
+        reply.m_payload.find("冲突副本.tex") != std::string::npos,
+        "RPC refresh publishes external tree change");
+    reply = exchange(15, std::string(R"({"version":2,"id":"list-trash","clientSequence":15,"method":"workspace.listTrash","params":{"workspaceId":")") +
+        workspaceId + R"("}})");
+    parsed = CefParseJSON(reply.m_payload, JSON_PARSER_RFC);
+    CefRefPtr<CefDictionaryValue> trashResult = parsed && parsed->GetDictionary() ?
+        parsed->GetDictionary()->GetDictionary("result") : nullptr;
+    CefRefPtr<CefListValue> trashEntries = trashResult ? trashResult->GetList("entries") : nullptr;
+    std::string fileTrashId;
+    if (trashEntries)
+    {
+        for (std::size_t index = 0; index < trashEntries->GetSize(); ++index)
+        {
+            CefRefPtr<CefDictionaryValue> entry = trashEntries->GetDictionary(index);
+            if (entry && entry->GetString("originalFileId").ToString() == "改名.tex")
+                fileTrashId = entry->GetString("trashId").ToString();
+        }
+    }
+    check(reply.m_success && fileTrashId.size() == 32, "RPC lists indexed trash");
+    reply = exchange(16, std::string(R"({"version":2,"id":"restore-trash","clientSequence":16,"method":"workspace.restoreTrash","params":{"workspaceId":")") +
+        workspaceId + R"(","trashId":")" + fileTrashId + R"("}})");
+    check(reply.m_success && read(root / L"改名.tex") == "保留正文",
+        "RPC restores trash without changing bytes");
+    reply = exchange(17,
+        R"({"version":2,"id":"close-workspace","clientSequence":17,"method":"workspace.close","params":{}})");
     check(reply.m_success && reply.m_payload.find("workspace.close") != std::string::npos,
         "workspace close releases session");
     endpoint->close();

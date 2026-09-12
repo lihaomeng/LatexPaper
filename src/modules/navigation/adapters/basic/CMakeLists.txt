@@ -1,0 +1,4 @@
+add_library(lol_navigation_adapter_basic STATIC src/kbasicnavigationbackend.cpp)
+target_include_directories(lol_navigation_adapter_basic PUBLIC include)
+target_link_libraries(lol_navigation_adapter_basic PUBLIC lol_navigation_outbound PRIVATE lol_navigation_domain)
+lol_register(lol_navigation_adapter_basic adapter navigation)

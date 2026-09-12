@@ -1,0 +1,4 @@
+[
+ {"name":"preview read request","type":"PreviewReadRequest","accepted":true,"value":{"version":2,"id":"preview-1","clientSequence":1,"method":"preview.read","params":{"artifactId":"job-1-42-7","offset":0,"count":524288}}},
+ {"name":"preview chunk response","type":"PreviewReadResponse","accepted":true,"value":{"version":2,"id":"preview-1","clientSequence":1,"ok":true,"method":"preview.read","result":{"offset":0,"totalBytes":8,"hex":"255044462d312e34"}}}
+]

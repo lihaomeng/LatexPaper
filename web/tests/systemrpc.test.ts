@@ -102,5 +102,5 @@ test('transport exceptions and empty failure codes reject instead of leaving pro
   const throwing: SystemTransport = { send: () => { throw new Error('gone'); } };
   const failing: SystemTransport = { send: (_wire, _success, failure) => { failure(''); return () => {}; } };
   for (const transport of [throwing, failing]) await assert.rejects(new SystemRpcClient(transport).request(request), /TRANSPORT_UNAVAILABLE/);
-  for (const timeout of [0, -1, NaN, Infinity, 60001]) assert.throws(() => new SystemRpcClient(throwing, timeout), /INVALID_TIMEOUT/);
+  for (const timeout of [0, -1, NaN, Infinity, 305001]) assert.throws(() => new SystemRpcClient(throwing, timeout), /INVALID_TIMEOUT/);
 });

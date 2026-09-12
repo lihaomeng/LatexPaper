@@ -959,8 +959,13 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 - M1：Qt/CEF 外壳新增独立纯 C++ 生命周期策略、两次 Renderer 恢复上限、加载与关闭超时。Qt 只依赖浏览器端口；CEF 不调用 Qt 实现。当前 Smoke 覆盖草稿工作台就绪与重载，不承诺未保存原生项目文档恢复。
 - M2：React/Vite 与离线资源加载可运行；开发模式允许 Fake，桌面生产模式要求真实 CEF 通道。用户已授权仅放开 style-src-attr，Monaco 行定位已修复且浏览器视觉复验通过；桌面完整视觉、中文 IME 与 Worker 执行证据仍需补齐。PDF Worker 在 M6 接入，不声称全部资源类型已验收。
 - M3：System RPC 基线已验收。会话逻辑提取到纯 C++ KRpcEndpoint，CEF/Loopback 运行共用替换场景，真实跨进程取消与 Renderer 恢复通过双配置桌面测试；见 `docs/acceptance/M3-endpoint-substitution.md`。
-- M4：独立 Workspace/Document 已接通本地项目、多标签保存和冲突恢复；普通文件与目录均支持非覆盖新建、重命名/移动和项目内可恢复删除，并已接入 Workspace 显式刷新。文件命令与目录命令使用不同 Inbound/Outbound DTO、Store 方法和 RPC Schema，禁止用布尔参数混淆语义。刷新经 Outbound Store 重新扫描，并在前端按 Revision 协调已加载模型；Dirty、并发编辑和旧会话结果均不得覆盖。当前采用可见窗口 5 秒轮询与手动刷新，原生实时文件监视仍是后续可替换 Adapter。入站与出站命令独立映射，不放宽架构规则。回收恢复 UI、冲突合并/另存、桌面人工及文件边界验收仍待完成。状态为进行中，最新测试见 `docs/acceptance/M4-document-core.md`。
-- M5～M8：尚未实现完整业务功能，不以空 Target 或启动页面冒充交付。Monaco 多标签和应用内草稿缓存不等于本地项目保存。
+- M4：独立 Workspace/Document 已接通本地项目、多标签保存和冲突恢复；文件与目录管理、带索引回收恢复、冲突三方合并、原子非覆盖另存以及 Windows 原生变化通知驱动的安全刷新均已贯通。文件、目录、回收、刷新与另存使用独立 DTO、Store 方法和 RPC Schema；Dirty、并发编辑和旧会话结果不得覆盖。自动化实现完成，4 MiB 真实跨进程极值、特权 Reparse Point/极端长路径/崩溃中断夹具及可见桌面中文 IME 仍是环境/人工验收项，最新证据见 `docs/acceptance/M4-document-core.md`。
+- M5：Search/Build 的端口、快照、Windows 进程后端、取消、超时与诊断已贯通；本机无 TeX，真实论文编译仍待外部环境验收。
+- M6：Preview Artifact、分块 RPC、PDF.js 离线 Worker与 Windows SyncTeX 命令适配器已贯通。真实适配器通过私有临时目录物化 PDF/`.synctex.gz`、无 Shell 启动、Job Object、超时、输出上限和严格解析；Basic Fake 仅用于测试，生产无命令时使用 Unavailable Adapter。运行时只在发现 `synctex.exe` 后报告 `syncTex=true`；本机无 TeX，真实论文端到端仍待外部环境验收。
+- M7：Preferences/Session 独立模块、SQLite Adapter、RPC、设置页、布局/标签恢复和最近项目已贯通；可见 CEF 窗口人工复验待补。
+- M8：Lite 单文件可运行 EXE 已生成并直接 smoke 通过；Full 脚本已建立，但缺少 Portable TeX 外部载荷。代码签名与干净虚拟机人工验收仍待完成。
+
+最新逐阶段状态、证据和产物路径统一见 `docs/development/阶段进度.md` 与 `docs/acceptance/M5-search-build.md`～`M8-release.md`，不得用本节历史段落覆盖最新验收结论。
 
 2026-09-11 界面增量：参考用户截图写入深色三栏工作台、文件树、大纲和 Monaco 草稿编辑。草稿恢复适配器与原生项目文件服务分离；设计见 ADR 0003。64 项前端测试和桌面双配置各 11 项测试通过，但 Monaco style 属性仍被严格 CSP 阻止，视觉验收未通过，等待用户确认样式权限。不能据此将 M2/M4 标记为全部完成。详见 `docs/acceptance/M2-draft-workbench.md`。
 

@@ -1,0 +1,4 @@
+add_library(lol_navigation_domain STATIC src/knavigationpolicy.cpp)
+target_include_directories(lol_navigation_domain PUBLIC include)
+target_link_libraries(lol_navigation_domain PUBLIC lol_kernel)
+lol_register(lol_navigation_domain domain navigation)

@@ -135,6 +135,23 @@ int main()
         }
     }
     check(recovered, "deleted bytes recoverable in trash");
+    KResult<std::vector<KWorkspaceTrashEntry>> trash = workspaces->listTrash(workspaceId);
+    check(std::holds_alternative<std::vector<KWorkspaceTrashEntry>>(trash) &&
+        std::get<std::vector<KWorkspaceTrashEntry>>(trash).size() == 1 &&
+        std::get<std::vector<KWorkspaceTrashEntry>>(trash)[0].m_originalFileId == "章节/改名.tex" &&
+        !std::get<std::vector<KWorkspaceTrashEntry>>(trash)[0].m_directory,
+        "indexed file deletion");
+    if (const auto* entries = std::get_if<std::vector<KWorkspaceTrashEntry>>(&trash); entries && !entries->empty())
+    {
+        check(std::holds_alternative<KWorkspaceState>(workspaces->restoreTrash(
+            {workspaceId, entries->front().m_trashId})), "restore deleted file");
+        std::ifstream restored(root.path() / L"章节/改名.tex", std::ios::binary);
+        const std::string restoredContent((std::istreambuf_iterator<char>(restored)),
+            std::istreambuf_iterator<char>());
+        check(restoredContent == "must-survive", "restored file bytes");
+        check(failed(workspaces->restoreTrash({workspaceId, entries->front().m_trashId}),
+            KErrorCode::NotFound), "trash token is single use");
+    }
     check(failed(workspaces->mutate({KWorkspaceMutationKind::CreateEmpty, workspaceId, ".lightoverleaf-trash/forged.tex", ""}),
         KErrorCode::InvalidArgument), "reserved trash protected");
     check(failed(workspaces->mutate({KWorkspaceMutationKind::RemoveFile, workspaceId, "章节", ""}),
@@ -178,6 +195,37 @@ int main()
     }
     check(recoveredDirectory && !std::filesystem::exists(root.path() / L"材料"),
         "removed directory subtree is recoverable");
+    trash = workspaces->listTrash(workspaceId);
+    if (const auto* entries = std::get_if<std::vector<KWorkspaceTrashEntry>>(&trash); entries)
+    {
+        const auto directory = std::find_if(entries->begin(), entries->end(),
+            [](const KWorkspaceTrashEntry& entry) { return entry.m_directory; });
+        check(directory != entries->end() && directory->m_originalFileId == "材料",
+            "indexed directory deletion");
+        if (directory != entries->end())
+        {
+            check(std::holds_alternative<KWorkspaceState>(workspaces->restoreTrash(
+                {workspaceId, directory->m_trashId})) &&
+                std::filesystem::is_regular_file(root.path() / L"材料/note.tex"),
+                "restore deleted directory tree");
+        }
+    }
+    write(root.path() / L"watch-event.tex", "change");
+    bool changed = false;
+    for (int attempt = 0; attempt < 100 && !changed; ++attempt)
+    {
+        KResult<bool> event = workspaces->pollChanges(workspaceId);
+        changed = std::holds_alternative<bool>(event) && std::get<bool>(event);
+        if (!changed) Sleep(10);
+    }
+    check(changed, "native watcher observes subtree change");
+    bool drained = false;
+    for (int attempt = 0; attempt < 100 && !drained; ++attempt)
+    {
+        const KResult<bool> next = workspaces->pollChanges(workspaceId);
+        drained = std::holds_alternative<bool>(next) && !std::get<bool>(next);
+    }
+    check(drained, "native watcher drains notification burst");
     std::filesystem::remove(outside, cleanupError);
     return failures == 0 ? 0 : 1;
 }

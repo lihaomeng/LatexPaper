@@ -1,0 +1,4 @@
+add_library(lol_search_domain STATIC src/ksearchpolicy.cpp)
+target_include_directories(lol_search_domain PUBLIC include)
+target_link_libraries(lol_search_domain PRIVATE lol_kernel)
+lol_register(lol_search_domain domain search)

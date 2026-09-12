@@ -1,0 +1,13 @@
+[
+  { "name": "search unicode request", "type": "SearchStartRequest", "accepted": true,
+    "value": { "version": 2, "id": "search-1", "clientSequence": 1, "method": "search.start",
+      "params": { "query": "中文", "caseSensitive": false, "maxResults": 200 } } },
+  { "name": "search rejects unbounded count", "type": "SearchStartRequest", "accepted": false,
+    "value": { "version": 2, "id": "search-2", "clientSequence": 2, "method": "search.start",
+      "params": { "query": "x", "caseSensitive": false, "maxResults": 501 } } },
+  { "name": "search bounded response", "type": "SearchStartResponse", "accepted": true,
+    "value": { "version": 2, "id": "search-1", "clientSequence": 1, "ok": true,
+      "method": "search.start", "result": { "hits": [
+        { "fileId": "章节/一.tex", "line": 3, "column": 2, "preview": "中文" }
+      ], "truncated": false } } }
+]

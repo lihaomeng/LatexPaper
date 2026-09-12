@@ -1,7 +1,7 @@
 interface SaveSession {
   getView(): { files: { path: string; dirty: boolean }[] };
   capture(): { snapshot: { files: { path: string; content: string }[] }; versions: Map<string, number> };
-  acknowledge(versions: Map<string, number>): void;
+  acknowledge(versions: Map<string, number>, contents?: Map<string, string>): void;
 }
 interface DocumentWriter {
   saveDocument(path: string, content: string, revision: string): Promise<{ revision: string }>;
@@ -28,6 +28,6 @@ export async function saveLocalDocuments(session: SaveSession, revisions: Map<st
       .catch(cause => { throw new LocalDocumentSaveError(file.path, cause); });
     if (!isCurrent()) return;
     revisions.set(file.path, saved.revision);
-    session.acknowledge(new Map([[file.path, version]]));
+    session.acknowledge(new Map([[file.path, version]]), new Map([[file.path, file.content]]));
   }
 }

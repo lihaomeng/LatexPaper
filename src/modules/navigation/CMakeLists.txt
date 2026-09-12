@@ -1,0 +1,7 @@
+add_subdirectory(domain)
+add_subdirectory(application)
+add_subdirectory(adapters/basic)
+add_subdirectory(adapters/unavailable)
+if(WIN32)
+  add_subdirectory(adapters/windows)
+endif()

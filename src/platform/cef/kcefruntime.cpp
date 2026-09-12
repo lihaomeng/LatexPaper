@@ -4,6 +4,7 @@
 #include <array>
 #include <string_view>
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <utility>
 #include "include/cef_app.h"
@@ -196,6 +197,14 @@ public:
     CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
     CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
     CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+    bool OnConsoleMessage(CefRefPtr<CefBrowser>, cef_log_severity_t,
+        const CefString& message, const CefString& source, int line) override
+    {
+        std::fprintf(stderr, "CEF console %s:%d: %s\n", source.ToString().c_str(), line,
+            message.ToString().c_str());
+        std::fflush(stderr);
+        return false;
+    }
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override { m_browser = browser; }
     void OnBeforeClose(CefRefPtr<CefBrowser> browser) override
     {

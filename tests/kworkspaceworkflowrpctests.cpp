@@ -1,4 +1,6 @@
 #include <lightoverleaf/rpc/kapplicationrpchandler.h>
+#include <lightoverleaf/preferences/inbound/ikpreferences.h>
+#include <lightoverleaf/session/inbound/iksessions.h>
 #include <lightoverleaf/system/inbound/ikgetcapabilities.h>
 #include <lightoverleaf/workspaceworkflow/inbound/ikworkspaceworkflow.h>
 #include <iostream>
@@ -31,6 +33,22 @@ public:
         m_state->m_revision = "mutation-directory";
         return *m_state;
     }
+    KResult<std::vector<workspace::KWorkspaceTrashEntry>> listTrash(const std::string&,
+        std::stop_token) override
+    {
+        return std::vector<workspace::KWorkspaceTrashEntry>{{
+            "0123456789abcdef0123456789abcdef", "旧稿.tex", false, 1770000000000ULL}};
+    }
+    KResult<workspace::KWorkspaceState> restoreTrash(const workspace::KRestoreWorkspaceEntry& command,
+        std::stop_token) override
+    {
+        if (!m_state || command.m_workspaceId != m_state->m_id ||
+            command.m_trashId != "0123456789abcdef0123456789abcdef")
+            return KError{KErrorCode::InvalidArgument, "test.invalid", false};
+        m_state->m_revision = "trash-restored";
+        return *m_state;
+    }
+    KResult<bool> pollChanges(const std::string&, std::stop_token) override { return false; }
     KResult<workspace::KWorkspaceState> open(const std::string& selection,
         std::stop_token stop) override
     {
@@ -64,6 +82,62 @@ public:
             return KError{KErrorCode::Conflict, "conflict", true};
         return document::KDocumentSaved{command.m_fileId, "document-2", command.m_clientSequence};
     }
+    KResult<document::KDocumentSaved> saveAs(const document::KSaveDocumentAs& command,
+        std::stop_token stop) override
+    {
+        if (stop.stop_requested())
+            return KError{KErrorCode::Cancelled, "cancelled", true};
+        return document::KDocumentSaved{command.m_fileId, "document-copy",
+            command.m_clientSequence};
+    }
+};
+
+class KFakeSearch final : public search::IKSearch
+{
+public:
+    KResult<search::KSearchResult> run(const search::KSearchCommand& command,
+        std::stop_token) override
+    {
+        return search::KSearchResult{{{"章节/引言.tex", 2, 3, command.m_query}}, false};
+    }
+};
+
+class KFakeBuilds final : public build::IKBuilds
+{
+public:
+    KResult<std::vector<build::KCompilerCapability>> detect(std::stop_token) override
+    {
+        return std::vector<build::KCompilerCapability>{{"fake-tex", "Fake TeX", {build::KBuildEngine::XeLatex}}};
+    }
+    KResult<build::KBuildResult> start(const build::KBuildCommand& command,
+        std::stop_token) override
+    {
+        return build::KBuildResult{command.m_jobId, build::KBuildTerminal::Succeeded, 0,
+            "ok", false, {}};
+    }
+    KResult<bool> cancel(const std::string&) override { return true; }
+};
+
+class KFakePreferences final : public preferences::IKPreferences
+{
+public:
+    KResult<preferences::KPreferences> get() const override { return m_value; }
+    KResult<preferences::KPreferences> update(const preferences::KPreferences& value) override
+    { m_value = value; return m_value; }
+private:
+    preferences::KPreferences m_value;
+};
+
+class KFakeSessions final : public session::IKSessions
+{
+public:
+    KResult<std::optional<session::KSessionState>> restore() const override { return m_value; }
+    KResult<bool> save(const session::KSessionState& value) override
+    { m_value = value; return true; }
+    KResult<std::vector<std::string>> history() const override
+    { return std::vector<std::string>{"D:/论文"}; }
+private:
+    std::optional<session::KSessionState> m_value;
 };
 
 KValue request(const std::string& id, const std::string& method, KValue::KObject params = {},
@@ -95,9 +169,14 @@ int main()
         {
             if (selection != "D:/论文") return KError{KErrorCode::NotFound, "missing", false};
             return std::unique_ptr<document::IKDocuments>(std::make_unique<KFakeDocuments>());
-        });
+        },
+        [](const std::string&) -> KResult<std::unique_ptr<search::IKSearch>>
+        { return std::unique_ptr<search::IKSearch>(std::make_unique<KFakeSearch>()); },
+        [](const std::string&) -> KResult<std::shared_ptr<build::IKBuilds>>
+        { return std::shared_ptr<build::IKBuilds>(std::make_shared<KFakeBuilds>()); });
     const auto sharedWorkflow = std::shared_ptr<workspaceworkflow::IKWorkspaceWorkflow>(std::move(workflow));
-    KApplicationRpcHandler handler(createCapabilities({true, false, false, false}), sharedWorkflow);
+    KApplicationRpcHandler handler(createCapabilities({true, false, false, false}), sharedWorkflow,
+        std::make_shared<KFakePreferences>(), std::make_shared<KFakeSessions>());
 
     KValue response = handler.dispatch(request("before-open", "document.open",
         {{"fileId", KValue{std::string("章节/引言.tex")}}}), std::nullopt, {});
@@ -126,6 +205,19 @@ int main()
     check(v2::validateWorkspaceStateResponse(response) &&
         std::get<std::string>(std::get<KValue::KObject>(response.m_value).at("method").m_value) ==
             "workspace.manageDirectory", "workspace directory response");
+    response = handler.dispatch(request("trash-list", "workspace.listTrash",
+        {{"workspaceId", KValue{std::string("workspace-1")}}}), std::nullopt, {});
+    check(v2::validateWorkspaceTrashListResponse(response), "workspace trash list response");
+    response = handler.dispatch(request("trash-restore", "workspace.restoreTrash",
+        {{"workspaceId", KValue{std::string("workspace-1")}},
+         {"trashId", KValue{std::string("0123456789abcdef0123456789abcdef")}}}),
+        std::nullopt, {});
+    check(v2::validateWorkspaceStateResponse(response) &&
+        std::get<std::string>(std::get<KValue::KObject>(response.m_value).at("method").m_value) ==
+            "workspace.restoreTrash", "workspace trash restore response");
+    response = handler.dispatch(request("change-poll", "workspace.pollChanges",
+        {{"workspaceId", KValue{std::string("workspace-1")}}}), std::nullopt, {});
+    check(v2::validateWorkspacePollChangesResponse(response), "workspace native change response");
     response = handler.dispatch(request("open-document", "document.open",
         {{"fileId", KValue{std::string("章节/引言.tex")}}}, 4), std::nullopt, {});
     check(v2::validateDocumentOpenResponse(response), "document open response");
@@ -134,6 +226,27 @@ int main()
          {"content", KValue{std::string("新内容")}},
          {"expectedRevision", KValue{std::string("document-1")}}}, 5), std::nullopt, {});
     check(v2::validateDocumentSaveResponse(response), "document save response");
+    response = handler.dispatch(request("save-document-as", "document.saveAs",
+        {{"fileId", KValue{std::string("章节/副本.tex")}},
+         {"content", KValue{std::string("保留编辑")}},
+         {"utf8Bom", KValue{true}}}, 7), std::nullopt, {});
+    check(v2::validateDocumentSaveResponse(response) &&
+        std::get<std::string>(std::get<KValue::KObject>(response.m_value).at("method").m_value) ==
+            "document.saveAs", "document save as response");
+    response = handler.dispatch(request("search", "search.start",
+        {{"query", KValue{std::string("中文")}}, {"caseSensitive", KValue{false}},
+         {"maxResults", KValue{20.0}}}), std::nullopt, {});
+    check(v2::validateSearchStartResponse(response), "search response");
+    response = handler.dispatch(request("detect", "build.detect"), std::nullopt, {});
+    check(v2::validateBuildDetectResponse(response), "build detection response");
+    response = handler.dispatch(request("build", "build.start",
+        {{"jobId", KValue{std::string("job-1")}}, {"snapshotId", KValue{std::string("snapshot-1")}},
+         {"mainFileId", KValue{std::string("main.tex")}}, {"engine", KValue{std::string("xelatex")}},
+         {"timeoutMs", KValue{3000.0}}}), std::nullopt, {});
+    check(v2::validateBuildStartResponse(response), "build start response");
+    response = handler.dispatch(request("cancel", "build.cancel",
+        {{"jobId", KValue{std::string("job-1")}}}), std::nullopt, {});
+    check(v2::validateBuildCancelResponse(response), "build cancel response");
     response = handler.dispatch(request("conflict", "document.save",
         {{"fileId", KValue{std::string("章节/引言.tex")}},
          {"content", KValue{std::string("冲突")}},
@@ -145,6 +258,24 @@ int main()
     response = handler.dispatch(request("after-close", "document.open",
         {{"fileId", KValue{std::string("章节/引言.tex")}}}), std::nullopt, {});
     check(errorCode(response) == "WORKSPACE_NOT_OPEN", "close releases document session");
+
+    response = handler.dispatch(request("preferences-get", "preferences.get"), std::nullopt, {});
+    check(v2::validatePreferencesGetResponse(response), "preferences get response");
+    response = handler.dispatch(request("preferences-update", "preferences.update",
+        {{"texRoot", KValue{std::string("D:/texlive")}},
+         {"engine", KValue{std::string("lualatex")}}, {"timeoutMs", KValue{45000.0}},
+         {"autoCompile", KValue{true}}}), std::nullopt, {});
+    check(v2::validatePreferencesGetResponse(response), "preferences update response");
+    response = handler.dispatch(request("session-save", "session.save",
+        {{"workspaceRoot", KValue{std::string("D:/论文")}},
+         {"openFiles", KValue{KValue::KArray{KValue{std::string("main.tex")}}}},
+         {"activeFile", KValue{std::string("main.tex")}},
+         {"sidebarWidth", KValue{300.0}}, {"previewOpen", KValue{true}}}), std::nullopt, {});
+    check(v2::validateSessionSaveResponse(response), "session save response");
+    response = handler.dispatch(request("session-restore", "session.restore"), std::nullopt, {});
+    check(v2::validateSessionRestoreResponse(response), "session restore response");
+    response = handler.dispatch(request("session-history", "session.history"), std::nullopt, {});
+    check(v2::validateSessionHistoryResponse(response), "session history response");
 
     check(!workspaceworkflow::createWorkspaceWorkflow({}, [](const std::string&)
         -> KResult<std::unique_ptr<document::IKDocuments>>

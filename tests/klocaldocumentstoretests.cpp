@@ -86,6 +86,17 @@ int main()
     check(failed(documents->save({"main.tex", "overwrite", original.m_revision, 1}), KErrorCode::Conflict),
         "external edit conflict");
     check(read(root.path() / L"main.tex") == std::string("\xEF\xBB\xBF") + "external", "conflict preserves external content");
+    const KResult<KDocumentSaved> copied = documents->saveAs(
+        {"章节/副本.tex", "副本内容", true, 9});
+    check(std::holds_alternative<KDocumentSaved>(copied) &&
+        read(root.path() / L"章节" / L"副本.tex") == std::string("\xEF\xBB\xBF") + "副本内容",
+        "save as creates BOM copy");
+    check(failed(documents->saveAs({"章节/副本.tex", "不得覆盖", false, 10}),
+        KErrorCode::Conflict) &&
+        read(root.path() / L"章节" / L"副本.tex") == std::string("\xEF\xBB\xBF") + "副本内容",
+        "save as never overwrites");
+    check(failed(documents->saveAs({"缺失/副本.tex", "内容", false, 11}),
+        KErrorCode::NotFound), "save as requires existing parent");
     const KDocumentSnapshot external = std::get<KDocumentSnapshot>(documents->open("main.tex"));
     const KResult<KDocumentSaved> saved = documents->save({"main.tex", "saved", external.m_revision, 2});
     check(std::holds_alternative<KDocumentSaved>(saved), "atomic save");
@@ -99,6 +110,10 @@ int main()
     std::stop_source stop;
     stop.request_stop();
     check(failed(store->read("main.tex", stop.get_token()), KErrorCode::Cancelled), "read cancellation");
+    check(failed(documents->saveAs({"cancelled-copy.tex", "no", false, 12},
+        stop.get_token()), KErrorCode::Cancelled) &&
+        !std::filesystem::exists(root.path() / L"cancelled-copy.tex"),
+        "save as cancellation leaves no target");
     const DWORD attributes = GetFileAttributesW((root.path() / L"main.tex").c_str());
     SetFileAttributesW((root.path() / L"main.tex").c_str(), attributes | FILE_ATTRIBUTE_READONLY);
     const KDocumentSnapshot readonly = std::get<KDocumentSnapshot>(documents->open("main.tex"));

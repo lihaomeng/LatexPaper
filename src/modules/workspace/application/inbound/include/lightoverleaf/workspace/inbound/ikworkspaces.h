@@ -38,6 +38,18 @@ struct KWorkspaceState
     std::string m_revision;
     std::vector<KWorkspaceEntry> m_entries;
 };
+struct KWorkspaceTrashEntry
+{
+    std::string m_trashId;
+    std::string m_originalFileId;
+    bool m_directory = false;
+    std::uint64_t m_deletedAtUnixMs = 0;
+};
+struct KRestoreWorkspaceEntry
+{
+    std::string m_workspaceId;
+    std::string m_trashId;
+};
 class IKWorkspaces
 {
 public:
@@ -47,6 +59,12 @@ public:
     virtual KResult<KWorkspaceState> refresh(std::stop_token stop = {}) = 0;
     virtual KResult<KWorkspaceState> mutate(const KWorkspaceMutation& command, std::stop_token stop = {}) = 0;
     virtual KResult<KWorkspaceState> mutateDirectory(const KWorkspaceDirectoryMutation& command,
+        std::stop_token stop = {}) = 0;
+    virtual KResult<std::vector<KWorkspaceTrashEntry>> listTrash(const std::string& workspaceId,
+        std::stop_token stop = {}) = 0;
+    virtual KResult<KWorkspaceState> restoreTrash(const KRestoreWorkspaceEntry& command,
+        std::stop_token stop = {}) = 0;
+    virtual KResult<bool> pollChanges(const std::string& workspaceId,
         std::stop_token stop = {}) = 0;
     virtual void close() noexcept = 0;
 };

@@ -8,12 +8,23 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/system.schema.json"
   "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/workspace.schema.json"
   "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/document.schema.json"
+  "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/search.schema.json"
+  "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/build.schema.json"
+  "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/preview.schema.json"
+  "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/navigation.schema.json"
+  "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/preferences.schema.json"
+  "${PROJECT_SOURCE_DIR}/contracts/rpc/v2/session.schema.json"
   "${PROJECT_SOURCE_DIR}/tools/contractcodegen/protocol.py"
   "${PROJECT_SOURCE_DIR}/tests/fixtures/system-v2.json"
   "${PROJECT_SOURCE_DIR}/tests/fixtures/lifecycle-v2.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${PROJECT_SOURCE_DIR}/tests/fixtures/workspace-v2.json"
-  "${PROJECT_SOURCE_DIR}/tests/fixtures/document-v2.json")
+  "${PROJECT_SOURCE_DIR}/tests/fixtures/document-v2.json"
+  "${PROJECT_SOURCE_DIR}/tests/fixtures/search-v2.json"
+  "${PROJECT_SOURCE_DIR}/tests/fixtures/build-v2.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${PROJECT_SOURCE_DIR}/tests/fixtures/preview-v2.json"
+  "${PROJECT_SOURCE_DIR}/tests/fixtures/navigation-v2.json")
 add_library(lol_rpc_contract_cpp INTERFACE)
 target_include_directories(lol_rpc_contract_cpp INTERFACE "${LOL_GENERATED}")
 target_link_libraries(lol_rpc_contract_cpp INTERFACE lol_kernel)

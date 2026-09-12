@@ -1,0 +1,5 @@
+add_library(lol_search_adapter_localfs STATIC src/klocalsearchsource.cpp)
+target_include_directories(lol_search_adapter_localfs PUBLIC include)
+target_compile_definitions(lol_search_adapter_localfs PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(lol_search_adapter_localfs PUBLIC lol_search_outbound PRIVATE lol_search_domain)
+lol_register(lol_search_adapter_localfs adapter search)

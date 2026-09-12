@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "lightoverleaf:rpc:v2:preview",
+  "$defs": {
+    "PreviewReadRequest": {"type":"object","additionalProperties":false,
+      "required":["version","id","clientSequence","method","params"],"properties":{
+        "version":{"type":"integer","const":2},"id":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-zA-Z0-9-]+$"},
+        "clientSequence":{"type":"integer","minimum":0,"maximum":9007199254740991},"method":{"type":"string","const":"preview.read"},
+        "params":{"type":"object","additionalProperties":false,"required":["artifactId","offset","count"],"properties":{
+          "artifactId":{"type":"string","minLength":1,"maxLength":96,"pattern":"^[a-zA-Z0-9.-]+$"},
+          "offset":{"type":"integer","minimum":0,"maximum":67108864},"count":{"type":"integer","minimum":1,"maximum":524288}}}}},
+    "PreviewReadResponse": {"type":"object","additionalProperties":false,
+      "required":["version","id","clientSequence","ok","method","result"],"properties":{
+        "version":{"type":"integer","const":2},"id":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-zA-Z0-9-]+$"},
+        "clientSequence":{"type":"integer","minimum":0,"maximum":9007199254740991},"ok":{"type":"boolean","const":true},"method":{"type":"string","const":"preview.read"},
+        "result":{"type":"object","additionalProperties":false,"required":["offset","totalBytes","hex"],"properties":{
+          "offset":{"type":"integer","minimum":0,"maximum":67108864},"totalBytes":{"type":"integer","minimum":1,"maximum":67108864},
+          "hex":{"type":"string","minLength":0,"maxLength":1048576,"pattern":"^[a-zA-Z0-9-]+$"}}}}}
+  },
+  "oneOf":[{"$ref":"#/$defs/PreviewReadRequest"},{"$ref":"#/$defs/PreviewReadResponse"}]
+}

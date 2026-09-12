@@ -1,4 +1,23 @@
 [
+  { "name": "workspace native change poll", "type": "WorkspacePollChangesRequest", "accepted": true,
+    "value": { "version": 2, "id": "change-poll", "clientSequence": 1,
+      "method": "workspace.pollChanges", "params": { "workspaceId": "workspace-1" } } },
+  { "name": "workspace native change response", "type": "WorkspacePollChangesResponse", "accepted": true,
+    "value": { "version": 2, "id": "change-poll", "clientSequence": 1, "ok": true,
+      "method": "workspace.pollChanges", "result": { "changed": true } } },
+  { "name": "workspace trash list request", "type": "WorkspaceTrashListRequest", "accepted": true,
+    "value": { "version": 2, "id": "trash-list", "clientSequence": 1,
+      "method": "workspace.listTrash", "params": { "workspaceId": "workspace-1" } } },
+  { "name": "workspace trash restore request", "type": "WorkspaceTrashRestoreRequest", "accepted": true,
+    "value": { "version": 2, "id": "trash-restore", "clientSequence": 2,
+      "method": "workspace.restoreTrash", "params": { "workspaceId": "workspace-1",
+        "trashId": "0123456789abcdef0123456789abcdef" } } },
+  { "name": "workspace trash list response", "type": "WorkspaceTrashListResponse", "accepted": true,
+    "value": { "version": 2, "id": "trash-list", "clientSequence": 1, "ok": true,
+      "method": "workspace.listTrash", "result": { "entries": [
+        { "trashId": "0123456789abcdef0123456789abcdef", "originalFileId": "章节/旧稿.tex",
+          "directory": false, "deletedAtUnixMs": 1770000000000 }
+      ] } } },
   { "name": "workspace refresh request", "type": "WorkspaceRequest", "accepted": true,
     "value": { "version": 2, "id": "workspace-refresh", "clientSequence": 2,
       "method": "workspace.refresh", "params": {} } },

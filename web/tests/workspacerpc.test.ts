@@ -47,6 +47,38 @@ test('directory management uses its own RPC contract', async () => {
   ]);
 });
 
+test('trash listing and restore use explicit bounded contracts', async () => {
+  const requests: { method: string }[] = [];
+  const transport: SystemTransport = { send: (wire, success) => {
+    const request = JSON.parse(wire) as { id: string; clientSequence: number; method: string };
+    requests.push(request);
+    const base = { version: 2, id: request.id, clientSequence: request.clientSequence, ok: true };
+    success(JSON.stringify(request.method === 'workspace.listTrash' ? { ...base,
+      method: request.method, result: { entries: [{
+        trashId: '0123456789abcdef0123456789abcdef', originalFileId: '旧稿.tex',
+        directory: false, deletedAtUnixMs: 1770000000000 }] } } : { ...base,
+      method: request.method, result: { workspaceId: 'workspace-1', displayName: '项目',
+        revision: 'restored-1', entries: [] } }));
+    return () => {};
+  } };
+  const client = new WorkspaceRpcClient(new SystemRpcClient(transport));
+  const listed = await client.listTrash('workspace-1');
+  assert.equal(listed.entries[0].originalFileId, '旧稿.tex');
+  await client.restoreTrash('workspace-1', listed.entries[0].trashId);
+  assert.deepEqual(requests.map(request => request.method), ['workspace.listTrash', 'workspace.restoreTrash']);
+});
+
+test('native change polling validates a typed response', async () => {
+  const transport: SystemTransport = { send: (wire, success) => {
+    const request = JSON.parse(wire);
+    success(JSON.stringify({ version: 2, id: request.id, clientSequence: request.clientSequence,
+      ok: true, method: 'workspace.pollChanges', result: { changed: true } }));
+    return () => {};
+  } };
+  const client = new WorkspaceRpcClient(new SystemRpcClient(transport));
+  assert.equal(await client.pollChanges('workspace-1'), true);
+});
+
 test('workspace client maps generated requests and validates unicode projections', async () => {
   const methods: string[] = [];
   const transport: SystemTransport = { send: (wire, success) => {
@@ -69,8 +101,10 @@ test('workspace client maps generated requests and validates unicode projections
   assert.equal((await client.refresh()).revision, 'revision-1');
   assert.equal((await client.openDocument('章节/引言.tex')).content, '内容');
   assert.equal((await client.saveDocument('章节/引言.tex', '修改', 'document-1')).revision, 'document-2');
+  assert.equal((await client.saveDocumentAs('章节/副本.tex', '副本', true)).fileId, '章节/副本.tex');
   await client.close();
-  assert.deepEqual(methods, ['workspace.open', 'workspace.getState', 'workspace.refresh', 'document.open', 'document.save', 'workspace.close']);
+  assert.deepEqual(methods, ['workspace.open', 'workspace.getState', 'workspace.refresh',
+    'document.open', 'document.save', 'document.saveAs', 'workspace.close']);
 });
 
 test('workspace client rejects a mismatched response method', async () => {

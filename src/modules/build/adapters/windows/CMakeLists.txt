@@ -1,0 +1,5 @@
+add_library(lol_build_adapter_windows STATIC src/kwindowsbuildadapters.cpp)
+target_include_directories(lol_build_adapter_windows PUBLIC include)
+target_compile_definitions(lol_build_adapter_windows PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(lol_build_adapter_windows PUBLIC lol_build_outbound PRIVATE lol_build_domain)
+lol_register(lol_build_adapter_windows adapter build)

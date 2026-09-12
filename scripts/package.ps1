@@ -51,7 +51,7 @@ try {
         RequireFile $license
         Copy-Item -LiteralPath $license -Destination (Join-Path $payload "licenses/$port.txt")
     }
-    foreach ($package in @('react','react-dom','scheduler','monaco-editor')) {
+    foreach ($package in @('react','react-dom','scheduler','monaco-editor','pdfjs-dist')) {
         $license = Join-Path $repo "web/node_modules/$package/LICENSE"
         RequireFile $license
         Copy-Item -LiteralPath $license -Destination (Join-Path $payload "licenses/$package.txt")

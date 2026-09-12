@@ -49,6 +49,14 @@ bool inDirectory(const std::string& fileId, const std::string& directoryId)
     return fileId == directoryId || (fileId.size() > directoryId.size() &&
         fileId.compare(0, directoryId.size(), directoryId) == 0 && fileId[directoryId.size()] == '/');
 }
+
+bool validTrashId(const std::string& value)
+{
+    return value.size() == 32 && std::all_of(value.begin(), value.end(), [](const unsigned char byte)
+    {
+        return (byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'f');
+    });
+}
 }
 
 class KWorkspaces final : public IKWorkspaces
@@ -259,6 +267,91 @@ public:
         {
             return internal();
         }
+    }
+    KResult<std::vector<KWorkspaceTrashEntry>> listTrash(const std::string& workspaceId,
+        std::stop_token stop) override
+    {
+        if (!m_state) return KError{KErrorCode::Unavailable, "workspace.notOpen", false};
+        if (workspaceId != m_state->m_id) return invalid();
+        if (stop.stop_requested()) return cancelled();
+        try
+        {
+            KResult<std::vector<KStoredTrashEntry>> result =
+                m_store->listTrash(m_selection, workspaceId, stop);
+            if (const KError* failure = std::get_if<KError>(&result)) return *failure;
+            std::vector<KWorkspaceTrashEntry> entries;
+            for (KStoredTrashEntry& stored : std::get<std::vector<KStoredTrashEntry>>(result))
+            {
+                if (!validTrashId(stored.m_trashId) || !validWorkspaceFileId(stored.m_originalFileId) ||
+                    stored.m_deletedAtUnixMs == 0)
+                    return internal();
+                entries.push_back({std::move(stored.m_trashId), std::move(stored.m_originalFileId),
+                    stored.m_directory, stored.m_deletedAtUnixMs});
+            }
+            std::sort(entries.begin(), entries.end(), [](const KWorkspaceTrashEntry& left,
+                const KWorkspaceTrashEntry& right)
+            {
+                if (left.m_deletedAtUnixMs != right.m_deletedAtUnixMs)
+                    return left.m_deletedAtUnixMs > right.m_deletedAtUnixMs;
+                return left.m_trashId < right.m_trashId;
+            });
+            return entries;
+        }
+        catch (...)
+        {
+            return internal();
+        }
+    }
+    KResult<KWorkspaceState> restoreTrash(const KRestoreWorkspaceEntry& command,
+        std::stop_token stop) override
+    {
+        if (!m_state) return KError{KErrorCode::Unavailable, "workspace.notOpen", false};
+        if (command.m_workspaceId != m_state->m_id || !validTrashId(command.m_trashId))
+            return invalid();
+        if (stop.stop_requested()) return cancelled();
+        try
+        {
+            KResult<std::vector<KWorkspaceTrashEntry>> indexed = listTrash(command.m_workspaceId, stop);
+            if (const KError* failure = std::get_if<KError>(&indexed)) return *failure;
+            const auto& entries = std::get<std::vector<KWorkspaceTrashEntry>>(indexed);
+            const auto indexedEntry = std::find_if(entries.begin(), entries.end(),
+                [&](const KWorkspaceTrashEntry& entry) { return entry.m_trashId == command.m_trashId; });
+            if (indexedEntry == entries.end())
+                return KError{KErrorCode::NotFound, "workspace.trashNotFound", false};
+            KWorkspaceState committed = *m_state;
+            if (std::any_of(committed.m_entries.begin(), committed.m_entries.end(),
+                [&](const KWorkspaceEntry& entry) { return entry.m_fileId == indexedEntry->m_originalFileId; }))
+                return KError{KErrorCode::Conflict, "workspace.exists", false};
+            KResult<bool> restored = m_store->restoreTrash(m_selection, command.m_workspaceId,
+                command.m_trashId, stop);
+            if (const KError* failure = std::get_if<KError>(&restored)) return *failure;
+            if (!std::get<bool>(restored)) return internal();
+            // The adapter commit is now authoritative. A post-commit refresh is best effort:
+            // it must never turn a successful restore into an error that invites a duplicate retry.
+            committed.m_entries.push_back({indexedEntry->m_originalFileId, indexedEntry->m_directory, 0});
+            committed.m_revision = "mutation-" + std::to_string(++m_mutationSequence);
+            std::sort(committed.m_entries.begin(), committed.m_entries.end(), [](const auto& left, const auto& right)
+            {
+                if (left.m_directory != right.m_directory) return left.m_directory > right.m_directory;
+                return left.m_fileId < right.m_fileId;
+            });
+            m_state = std::move(committed);
+            KResult<KWorkspaceState> rescanned = refresh({});
+            if (const KWorkspaceState* refreshed = std::get_if<KWorkspaceState>(&rescanned)) return *refreshed;
+            return *m_state;
+        }
+        catch (...)
+        {
+            return internal();
+        }
+    }
+    KResult<bool> pollChanges(const std::string& workspaceId, std::stop_token stop) override
+    {
+        if (!m_state) return KError{KErrorCode::Unavailable, "workspace.notOpen", false};
+        if (workspaceId != m_state->m_id) return invalid();
+        if (stop.stop_requested()) return cancelled();
+        try { return m_store->pollChanges(m_selection, workspaceId, stop); }
+        catch (...) { return internal(); }
     }
     void close() noexcept override
     {

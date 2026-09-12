@@ -1,0 +1,6 @@
+add_library(lol_navigation_adapter_windows STATIC src/kwindowssynctexbackend.cpp)
+target_include_directories(lol_navigation_adapter_windows PUBLIC include)
+target_compile_definitions(lol_navigation_adapter_windows PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(lol_navigation_adapter_windows PUBLIC lol_navigation_outbound
+  PRIVATE lol_navigation_domain)
+lol_register(lol_navigation_adapter_windows adapter navigation)
