@@ -12,9 +12,11 @@ export interface BuildView {
   syncTexAvailable?: boolean;
 }
 export interface PdfTarget { page: number; x: number; y: number; revision: number }
-export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnostic, onReverse, target,
+export function PreviewPanel({ build, canCompile, requiresProject, onCompile, onCancel, onConfigure,
+  onDiagnostic, onReverse, target,
   zoom = 125, onZoomChange }: {
-  build: BuildView; canCompile: boolean; onCompile(): void; onCancel(): void;
+  build: BuildView; canCompile: boolean; requiresProject?: boolean; onCompile(): void; onCancel(): void;
+  onConfigure?(): void;
   onDiagnostic(fileId: string, line: number): void;
   onReverse?(page: number, x: number, y: number): void;
   target?: PdfTarget | null;
@@ -23,7 +25,7 @@ export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnos
 }) {
   const [tab, setTab] = useState<"preview" | "log">("preview");
   const running = build.state === "detecting" || build.state === "running";
-  const summary = build.state === "idle" ? "尚未创建编译任务" :
+  const summary = build.state === "idle" ? requiresProject ? "草稿尚未保存为本地项目" : "尚未创建编译任务" :
     build.state === "detecting" ? "正在检测 TeX 工具链" : build.state === "running" ? "正在本地编译" :
     build.state === "succeeded" ? "编译成功" : build.state === "unavailable" ? "未检测到 TeX 编译器" :
     build.state === "cancelled" ? "编译已取消" : build.state === "timedOut" ? "编译超时" : "编译失败";
@@ -31,8 +33,9 @@ export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnos
     <div className="preview-toolbar">
       <button className="compile-button" disabled={!canCompile && !running}
         onClick={running ? onCancel : onCompile}
-        title={running ? "取消当前编译" : canCompile ? "保存修改并编译当前主文件" : "请先打开本地项目"}>
-        <Icon name="play" size={12} /> {running ? "取消编译" : "重新编译"} <span>⌄</span></button>
+        title={running ? "取消当前编译" : canCompile ? requiresProject ?
+          "选择空文件夹，将草稿保存为本地项目后编译" : "保存修改并编译当前主文件" : "请先打开一个 LaTeX 文件"}>
+        <Icon name="play" size={12} /> {running ? "取消编译" : requiresProject ? "保存并编译" : "重新编译"} <span>⌄</span></button>
       <div className="preview-tabs" role="tablist" aria-label="预览视图">
         <button role="tab" aria-selected={tab === "preview"} onClick={() => setTab("preview")}>PDF 预览</button>
         <button role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>日志</button>
@@ -44,7 +47,10 @@ export function PreviewPanel({ build, canCompile, onCompile, onCancel, onDiagnos
         <div className="paper-icon"><Icon name="pdf" size={34} /></div>
         <span className="small-label">PDF PREVIEW</span>
         <h2>让想法，成为文档。</h2>
-        <p>{summary}。<br />M5 已在隔离 Snapshot 中执行；PDF 显示由 M6 Artifact 服务接管。</p>
+        <p>{summary}。<br />{requiresProject ? "点击“保存并编译”，选择空文件夹后自动创建项目快照。" :
+          "编译在隔离 Snapshot 中执行；PDF 由 Artifact 服务交给 PDF.js。"}</p>
+        {build.state === "unavailable" && onConfigure &&
+          <button className="preview-action" onClick={onConfigure}>配置 TeX 工具链</button>}
         <div className="pipeline"><span><i />编辑源码</span><span className="pipeline-line" /><span className={build.state === "idle" ? "inactive" : ""}><i />本地编译</span><span className="pipeline-line" /><span className="inactive"><i />PDF 预览</span></div>
         <div className="preview-note"><Icon name="info" size={14} /><span>不会上传内容，也不会自动下载 TeX。</span></div>
       </div>}

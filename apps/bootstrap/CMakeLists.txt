@@ -9,6 +9,12 @@ lol_register(LightOverLeafApp composition desktop)
 add_dependencies(LightOverLeafApp lol_frontend)
 lol_deploy_cef(LightOverLeafApp)
 add_custom_target(LightOverLeafBootstrap DEPENDS LightOverLeafApp)
+add_executable(LightOverLeafRuntimeLauncher WIN32 kruntimelauncher.cpp)
+target_compile_definitions(LightOverLeafRuntimeLauncher PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+set_target_properties(LightOverLeafRuntimeLauncher PROPERTIES
+  MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>")
+lol_register(LightOverLeafRuntimeLauncher bootstrap packaging)
 if(BUILD_TESTING)
   add_test(NAME LightOverLeafDesktopSmoke COMMAND "$<TARGET_FILE_DIR:LightOverLeafApp>/LightOverLeaf.exe" --smoke-test)
   set_tests_properties(LightOverLeafDesktopSmoke PROPERTIES TIMEOUT 45)

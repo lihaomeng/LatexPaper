@@ -1,6 +1,7 @@
 #pragma once
 #include <lightoverleaf/build/outbound/ikbuildsnapshotstore.h>
 #include <lightoverleaf/build/outbound/ikcompilerbackend.h>
+#include <lightoverleaf/build/outbound/ikcompilerrootsource.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@ struct KWindowsBuildOptions
     std::string m_workspaceRootUtf8;
     std::string m_cacheRootUtf8;
     std::vector<std::string> m_texRootsUtf8;
+    std::shared_ptr<const IKCompilerRootSource> m_texRootSource;
 };
 struct KWindowsBuildAdapters
 {

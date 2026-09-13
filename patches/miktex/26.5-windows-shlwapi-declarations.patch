@@ -1,0 +1,35 @@
+diff --git a/Libraries/MiKTeX/Core/win/winRegistry.cpp b/Libraries/MiKTeX/Core/win/winRegistry.cpp
+--- a/Libraries/MiKTeX/Core/win/winRegistry.cpp
++++ b/Libraries/MiKTeX/Core/win/winRegistry.cpp
+@@ -20,6 +20,8 @@
+ 
+ #include "config.h"
+ 
++#include <Shlwapi.h>
++
+ #include <fmt/format.h>
+ #include <fmt/ostream.h>
+ #include <fmt/xchar.h>
+diff --git a/Libraries/MiKTeX/Core/Session/StartupConfig.cpp b/Libraries/MiKTeX/Core/Session/StartupConfig.cpp
+--- a/Libraries/MiKTeX/Core/Session/StartupConfig.cpp
++++ b/Libraries/MiKTeX/Core/Session/StartupConfig.cpp
+@@ -20,6 +20,8 @@
+ 
+ #include "config.h"
+ 
++#include <Shlwapi.h>
++
+ #include <fmt/format.h>
+ #include <fmt/ostream.h>
+ 
+diff --git a/Libraries/MiKTeX/Core/Utils/win/winUtils.cpp b/Libraries/MiKTeX/Core/Utils/win/winUtils.cpp
+--- a/Libraries/MiKTeX/Core/Utils/win/winUtils.cpp
++++ b/Libraries/MiKTeX/Core/Utils/win/winUtils.cpp
+@@ -15,6 +15,7 @@
+ #include <Windows.h>
+ #include <VersionHelpers.h>
+ #include <shlobj.h>
++#include <Shlwapi.h>
+ #include <strsafe.h>
+ #include <wininet.h>
+ 

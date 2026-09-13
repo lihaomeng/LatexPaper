@@ -48,3 +48,53 @@ npm.cmd run check
 - 搜索同时匹配文件名和正文，文件名命中使用 `[文件名]` 预览；规则位于 Search Application，不下沉到 LocalFS 或 React。
 
 本轮最终验证：前端 287/287；Debug 与 Release CTest 均为 33/33；V2 Fixture 共 163 项。真实 TeX 仍未安装，因此 latexmk 多轮论文、BibTeX/Biber 和实际日志节奏仍保留为外部工具链验收。
+
+## 2026-09-13：草稿到 PDF 编译入口与工具链发现修复
+
+- 用户截图中的按钮不可用已确认不是 PDF.js 故障：当时工作台处于“应用内草稿”，没有原生 Workspace，因此无法按架构创建不可变 Snapshot。现在草稿页显示“保存并编译”；点击后通过 Qt 的受信任目录选择器选择空目录，按父目录优先顺序原子写入全部草稿文件，再自动进入现有保存、Snapshot、Build、Artifact、PDF.js 流程。取消选择不会修改磁盘；中途失败时不删除已经成功写入的用户项目内容，并给出明确提示。
+- 新增 Build 自有 Outbound Port `IKCompilerRootSource`。Windows Build Adapter 每次 `detect/run` 都通过该端口读取最新 TeX Root；Composition Root 中的 Bridge 只依赖 Preferences Inbound Port，不让 Build Application 依赖 Preferences 实现或 SQLite。设置 TeX Root 后，当前项目下一次编译立即重新发现工具链，无需重启或重新选择项目。
+- Windows 探测新增有界的一层目录检查，支持配置为 `C:/texlive` 时发现 `C:/texlive/<年份>/bin/windows`，并检查系统盘 TeX Live、Program Files/LocalAppData MiKTeX、AppData TinyTeX、应用目录 `texlive` 与 PATH。单个 Root 最多检查 64 个直接子目录，不做无界递归。
+- 未检测到 TeX 时，预览区显示“配置 TeX 工具链”入口和可操作说明；继续禁止模拟成功、静默下载宏包、Shell Escape 或上传项目内容。
+
+本次实际验证（工作目录 `D:/CodeMyself/LightOverLeaf`）：
+
+```text
+npm.cmd run check
+ESLint passed; 288/288 frontend tests passed; TypeScript and Vite production build passed
+
+cmake --build --preset desktop-release --target LightOverLeafBuildTests LightOverLeafBootstrap
+passed, exit code 0
+
+ctest --preset desktop-release --output-on-failure
+33/33 passed, exit code 0; final clean package run 32.22 s
+
+scripts/package-lite.ps1 -SkipBuild
+33/33 passed; archive test passed; packaged EXE smoke passed
+```
+
+新版 Lite 单文件：`out/packages/lite-20260913-112357-e171003e/LightOverLeaf-0.1.0-lite-win64.exe`，152023040 bytes，SHA-256 `C099C007E73E0EBBA162BB13122E3BC16A6BB59ABF6F927049588FAECB1D3535`。
+
+本机再次检查 `latexmk.exe`、`pdflatex.exe`、`xelatex.exe`、`lualatex.exe`、`tectonic.exe`、MiKTeX 常见目录、仓库 `texlive` 及用户第三方库目录，均未发现真实 TeX。因此本次可以确认编译调用、动态发现、Fake EXE 产物发布、PDF 分块与桌面回归已通过，但不能声称真实论文已经在本机编译。Lite 版要产生真实 PDF，仍需用户安装 TeX Live/MiKTeX 或在设置中指向已有 TeX Root；Full 版仍需提供 Portable TeX 外部载荷。
+
+用户配置与排障步骤见 [`PDF编译配置与排障.md`](../development/PDF编译配置与排障.md)。
+
+## 2026-09-13：源码构建 MiKTeX 后端增量
+
+- Windows Adapter 新增应用旁 `runtime/miktex` 搜索根，并把 `miktex/bin/x64` 中的引擎报告为 `toolchainId=miktex`；Application/RPC/React 不依赖发行版。
+- 直接 MiKTeX 引擎调用显式附加 `--disable-installer`；Runtime 构建结束还会写入 `AutoInstall=0`，防止编译过程弹出安装器或静默联网。
+- 新增 MiKTeX 目录布局能力检测回归。真实源码 Runtime 尚在构建，完成前本节只验收接口与发现增量，不声称 PDF 端到端通过。
+- 构建方案与命令见 [`MiKTeX源码构建与集成.md`](../development/MiKTeX源码构建与集成.md)。
+
+## 2026-09-13：源码版 MiKTeX 真实编译验收
+
+- MiKTeX 26.5 源码归档 SHA-256 校验通过；Release 源码引擎、集成下载器和独立安装器构建完成，`basic` 宏包集安装到
+  `D:/CodeMyself/QTBest/thirdparty_install/miktex/texmfs/install`。
+- Windows Adapter 增加官方 `texmfs/install/miktex/bin/x64` 路径契约，同时保留开发安装布局；对应 Fake EXE 回归通过。
+- 实际调用源码版 `xelatex.exe --disable-installer -interaction=nonstopmode -halt-on-error -synctex=1`，
+  对 `tests/fixtures/tex/basic/main.tex` 编译退出码为 0。
+- 产物：`out/acceptance/miktex/main.pdf` 为 5172 bytes，
+  `out/acceptance/miktex/main.synctex.gz` 为 520 bytes。
+- 来源清单明确 `builtFromSource=true`、`packageSet=basic`、`autoInstall=false`；运行时不会弹安装器或静默联网补包。
+- 前端 288/288、Release CTest 33/33 通过。M5 的真实引擎、PDF 和 SyncTeX 基线已验收。
+- 已知边界：当前上游 `basic` 集合不包含任意论文依赖闭包，实测 `hyperref` 仍缺 `kvsetkeys`；
+  Full 论文发行需用 `-PackageSet complete` 重建或在显式构建阶段准备受控宏包集合。

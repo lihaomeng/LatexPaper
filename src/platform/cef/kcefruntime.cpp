@@ -328,19 +328,44 @@ public:
     bool start(std::uintptr_t parent, int width, int height, KBrowserCallbacks callbacks) override
     {
         if (parent == 0 || width <= 0 || height <= 0 || m_client) return false;
+        const HWND parentWindow = reinterpret_cast<HWND>(parent);
+        RECT clientRect{};
+        if (!GetClientRect(parentWindow, &clientRect)) return false;
+        const int clientWidth = clientRect.right - clientRect.left;
+        const int clientHeight = clientRect.bottom - clientRect.top;
+        if (clientWidth <= 0 || clientHeight <= 0) return false;
         m_client = new KBrowserClient(std::move(callbacks), m_endpointFactory, m_crashSmokeTest,
             m_rpcSmokeTest, m_payloadSmokeTest);
         CefWindowInfo window;
-        window.SetAsChild(reinterpret_cast<HWND>(parent), CefRect(0, 0, width, height));
+        window.SetAsChild(parentWindow, CefRect(0, 0, clientWidth, clientHeight));
         CefBrowserSettings settings;
-        return CefBrowserHost::CreateBrowserSync(window, m_client,
+        const bool created = CefBrowserHost::CreateBrowserSync(window, m_client,
             appUrl(m_rpcSmokeTest, m_payloadSmokeTest), settings, nullptr, nullptr) != nullptr;
+        if (!created)
+        {
+            m_client = nullptr;
+            return false;
+        }
+        m_parentWindow = parentWindow;
+        resize(width, height);
+        return true;
     }
     void resize(int width, int height) override
     {
         if (!m_client || !m_client->browser()) return;
+        int targetWidth = std::max(width, 1);
+        int targetHeight = std::max(height, 1);
+        RECT clientRect{};
+        if (m_parentWindow && GetClientRect(m_parentWindow, &clientRect))
+        {
+            const int clientWidth = static_cast<int>(clientRect.right - clientRect.left);
+            const int clientHeight = static_cast<int>(clientRect.bottom - clientRect.top);
+            targetWidth = std::max(clientWidth, 1);
+            targetHeight = std::max(clientHeight, 1);
+        }
         const HWND handle = m_client->browser()->GetHost()->GetWindowHandle();
-        if (handle) SetWindowPos(handle, nullptr, 0, 0, std::max(width, 1), std::max(height, 1), SWP_NOACTIVATE | SWP_NOZORDER);
+        if (handle) SetWindowPos(handle, nullptr, 0, 0, targetWidth, targetHeight,
+            SWP_NOACTIVATE | SWP_NOZORDER);
     }
     void close() override
     {
@@ -355,6 +380,7 @@ public:
 
 private:
     CefRefPtr<KBrowserClient> m_client = nullptr;
+    HWND m_parentWindow = nullptr;
     KNativeEndpointFactory m_endpointFactory;
     bool m_crashSmokeTest = false;
     bool m_rpcSmokeTest = false;

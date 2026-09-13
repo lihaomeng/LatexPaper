@@ -1,0 +1,13 @@
+diff --git a/Libraries/3rd/cairo/CMakeLists.txt b/Libraries/3rd/cairo/CMakeLists.txt
+--- a/Libraries/3rd/cairo/CMakeLists.txt
++++ b/Libraries/3rd/cairo/CMakeLists.txt
+@@ -19,7 +19,8 @@ set(HAS_PIXMAN_GLYPHS TRUE)
+ 
+ set(HAVE_UINT64_T TRUE)
+ 
+-set(CAIRO_HAS_DWRITE_FONT ${MIKTEX_NATIVE_WINDOWS})
++option(MIKTEX_CAIRO_DWRITE "Build Cairo DirectWrite font support" ${MIKTEX_NATIVE_WINDOWS})
++set(CAIRO_HAS_DWRITE_FONT ${MIKTEX_CAIRO_DWRITE})
+ set(CAIRO_HAS_FC_FONT TRUE)
+ set(CAIRO_HAS_FT_FONT TRUE)
+ set(CAIRO_HAS_IMAGE_SURFACE TRUE)

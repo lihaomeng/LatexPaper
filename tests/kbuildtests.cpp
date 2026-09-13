@@ -23,6 +23,14 @@ public:
         KResult<KPublishedBuildArtifact>{KPublishedBuildArtifact{"artifact-1",!sync.empty()}}; }
     bool called=false;
 };
+class KRootSource final : public IKCompilerRootSource
+{
+public:
+    std::vector<std::string> roots() const override { return m_roots; }
+
+public:
+    std::vector<std::string> m_roots;
+};
 std::string utf8(const fs::path& value)
 {
     const std::u8string encoded = value.u8string();
@@ -43,22 +51,38 @@ int main()
     const fs::path workspace = base / L"workspace";
     const fs::path cache = base / L"cache";
     const fs::path tex = base / L"tex";
+    const fs::path texBin = tex / L"2026" / L"bin" / L"windows";
+    const fs::path miktex = base / L"runtime" / L"miktex";
+    const fs::path miktexBin = miktex / L"texmfs" / L"install" / L"miktex" / L"bin" / L"x64";
     std::error_code error;
-    fs::remove_all(base, error); fs::create_directories(workspace, error); fs::create_directories(tex, error);
-    fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), tex / L"xelatex.exe", fs::copy_options::overwrite_existing, error);
+    fs::remove_all(base, error); fs::create_directories(workspace, error); fs::create_directories(texBin, error);
+    fs::create_directories(miktexBin, error);
+    fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), texBin / L"xelatex.exe", fs::copy_options::overwrite_existing, error);
+    fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), miktexBin / L"xelatex.exe", fs::copy_options::overwrite_existing, error);
     check(!error, "install fake xelatex fixture");
     write(workspace / L"main.tex", "OK");
-    KResult<KWindowsBuildAdapters> made = createWindowsBuildAdapters({utf8(workspace), utf8(cache), {utf8(tex)}});
+    auto rootSource = std::make_shared<KRootSource>();
+    KResult<KWindowsBuildAdapters> made = createWindowsBuildAdapters(
+        {utf8(workspace), utf8(cache), {}, rootSource});
     check(std::holds_alternative<KWindowsBuildAdapters>(made), "windows adapters factory");
     if (const auto* adapters = std::get_if<KWindowsBuildAdapters>(&made))
     {
         auto publisher=std::make_shared<KPublisher>();
         auto builds = createBuilds(adapters->m_snapshots, adapters->m_compiler,publisher);
+        rootSource->m_roots = {utf8(tex)};
         KResult<std::vector<KCompilerCapability>> detected = builds->detect();
         check(std::holds_alternative<std::vector<KCompilerCapability>>(detected) &&
             std::get<std::vector<KCompilerCapability>>(detected).size() == 1 &&
             std::get<std::vector<KCompilerCapability>>(detected).front().m_engines.size() == 1,
-            "configured backend detection");
+            "runtime-configured versioned TeX root detection");
+        rootSource->m_roots = {utf8(miktex)};
+        KResult<std::vector<KCompilerCapability>> detectedMiKTeX = builds->detect();
+        check(std::holds_alternative<std::vector<KCompilerCapability>>(detectedMiKTeX) &&
+            std::get<std::vector<KCompilerCapability>>(detectedMiKTeX).size() == 1 &&
+            std::get<std::vector<KCompilerCapability>>(detectedMiKTeX).front().m_toolchainId == "miktex" &&
+            std::get<std::vector<KCompilerCapability>>(detectedMiKTeX).front().m_displayName == "MiKTeX",
+            "source-built MiKTeX runtime detection");
+        rootSource->m_roots = {utf8(tex)};
         KResult<KBuildResult> success = builds->start({"job-ok", "snapshot-ok", "main.tex", KBuildEngine::XeLatex, 3000});
         check(std::holds_alternative<KBuildResult>(success) &&
             std::get<KBuildResult>(success).m_terminal == KBuildTerminal::Succeeded &&
@@ -72,7 +96,7 @@ int main()
             std::get<KBuildStatus>(completedStatus).m_state == KBuildState::Succeeded &&
             !std::get<KBuildStatus>(completedStatus).m_output.empty(),
             "completed build status retained");
-        fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), tex / L"latexmk.exe",
+        fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), texBin / L"latexmk.exe",
             fs::copy_options::overwrite_existing, error);
         KResult<KBuildResult> latexmk = builds->start(
             {"job-latexmk", "snapshot-latexmk", "main.tex", KBuildEngine::XeLatex, 3000});

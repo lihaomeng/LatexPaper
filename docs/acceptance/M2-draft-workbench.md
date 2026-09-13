@@ -84,3 +84,10 @@ ctest --preset desktop-release
 本次为增量构建，未声称全新 Configure。仍存在第三方 CEF 未使用参数警告、Vite 大体积 chunk 提示及依赖弃用提示；未升级依赖。首次批量浏览器脚本因命令行转义报 SyntaxError，改用显式 CLI 操作后完成验证，未作为应用缺陷计入。
 
 完成结论：授权的样式修复已完成，浏览器视觉阻塞解除。M2 保持进行中，尚需 CEF 桌面实际视觉／中文 IME、Worker 实际执行与离线加载证据、查找及撤销重做完整复验；不得以 Smoke 就绪替代这些检查。M3 尚未开始。M4～M8 和正式写作闭环均不在本次完成范围。
+## 2026-09-13：CEF 高 DPI 客户区铺满修复
+
+- 用户实际运行截图确认：在高 DPI 缩放下，React/CEF 内容只覆盖 Qt 窗口左上部分，右侧和底部留下白色客户区。
+- 根因是 Qt `QWidget::width/height` 为逻辑像素，而 CEF 的原生子 HWND 使用 Win32 客户区设备像素。CEF Platform 现在在创建与每次调整尺寸时从父 HWND 调用 `GetClientRect`，并使用该原生宽高设置子窗口。
+- 修复仅位于 CEF Platform，不向 React、RPC 或业务模块引入 Win32/DPI 类型。
+- Release 构建通过；受影响 Desktop/Renderer/RPC Payload/Qt Lifecycle/Architecture 测试 9/9，完整 Release 33/33。
+- `computer-use` 的 Windows sandbox helper 连续两次启动失败，无法在本轮生成修复后截图；因此自动化与结构验证通过，最终可见铺满效果仍等待用户使用新包复验。

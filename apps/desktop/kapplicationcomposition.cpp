@@ -13,6 +13,7 @@
 #include <lightoverleaf/build/adapters/kwindowsbuildadapters.h>
 #include <lightoverleaf/build/inbound/ikbuilds.h>
 #include <lightoverleaf/build/outbound/ikbuildartifactpublisher.h>
+#include <lightoverleaf/build/outbound/ikcompilerrootsource.h>
 #include <lightoverleaf/preview/adapters/klocalartifactstore.h>
 #include <lightoverleaf/preview/inbound/ikpreviewartifacts.h>
 #include <lightoverleaf/navigation/adapters/kunavailablesynctexbackend.h>
@@ -47,6 +48,24 @@ public:
         return build::KPublishedBuildArtifact{std::move(value.m_artifactId), value.m_syncTexAvailable};
     }
 private: std::shared_ptr<preview::IKPreviewArtifacts> m_previews;
+};
+
+class KPreferencesCompilerRootSource final : public build::IKCompilerRootSource
+{
+public:
+    explicit KPreferencesCompilerRootSource(std::shared_ptr<preferences::IKPreferences> preferences)
+        : m_preferences(std::move(preferences)) {}
+    std::vector<std::string> roots() const override
+    {
+        if (!m_preferences) return {};
+        KResult<preferences::KPreferences> result = m_preferences->get();
+        const auto* value = std::get_if<preferences::KPreferences>(&result);
+        return value && !value->m_texRoot.empty() ? std::vector<std::string>{value->m_texRoot} :
+            std::vector<std::string>{};
+    }
+
+private:
+    std::shared_ptr<preferences::IKPreferences> m_preferences;
 };
 class KSyncTexDataSourceBridge final : public navigation::IKSyncTexDataSource
 {
@@ -97,6 +116,14 @@ std::wstring environment(const wchar_t* name)
     const DWORD written = GetEnvironmentVariableW(name, value.data(), required);
     if (written == 0 || written >= required) return {};
     value.resize(written); return value;
+}
+std::filesystem::path moduleDirectory()
+{
+    std::vector<wchar_t> value(32768, L'\0');
+    const DWORD written = GetModuleFileNameW(nullptr, value.data(), static_cast<DWORD>(value.size()));
+    if (written == 0 || written >= value.size()) return std::filesystem::current_path();
+    value.resize(written);
+    return std::filesystem::path(value.data()).parent_path();
 }
 }
 
@@ -273,6 +300,8 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspace
     std::shared_ptr<session::IKSessions> sessionsService =
         session::createSessions(std::get<std::shared_ptr<session::IKSessionStore>>(
             std::move(sessionStore)));
+    const std::shared_ptr<const build::IKCompilerRootSource> compilerRootSource =
+        std::make_shared<KPreferencesCompilerRootSource>(preferencesService);
     KResult<std::shared_ptr<preview::IKArtifactStore>> artifactStore =
         preview::createLocalArtifactStore(utf8((applicationCache / L"artifacts").wstring()));
     if (const KError* error = std::get_if<KError>(&artifactStore)) return nullptr;
@@ -289,7 +318,10 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspace
         if (const auto* value = std::get_if<preferences::KPreferences>(&configuredPreferences);
             value && !value->m_texRoot.empty()) navigationTexRoots.push_back(value->m_texRoot);
     }
+    navigationTexRoots.push_back(utf8((moduleDirectory() / L"texlive").wstring()));
     navigationTexRoots.push_back(utf8((std::filesystem::current_path() / L"texlive").wstring()));
+    navigationTexRoots.push_back(utf8((moduleDirectory() / L"runtime" / L"miktex").wstring()));
+    navigationTexRoots.push_back(utf8((std::filesystem::current_path() / L"runtime" / L"miktex").wstring()));
     KResult<std::shared_ptr<navigation::IKSyncTexBackend>> windowsNavigation =
         navigation::createWindowsSyncTexBackend({
             utf8((applicationCache / L"navigation").wstring()),
@@ -301,23 +333,19 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspace
         navigation::createUnavailableSyncTexBackend();
     std::shared_ptr<navigation::IKNavigation> navigationService = navigation::createNavigation(
         std::move(syncSource), std::move(navigationBackend));
-    workspaceworkflow::KBuildFactory buildFactory = [publisher, applicationCache, preferencesService](const std::string& root)
+    workspaceworkflow::KBuildFactory buildFactory = [publisher, applicationCache, compilerRootSource](const std::string& root)
         -> KResult<std::shared_ptr<build::IKBuilds>>
     {
         std::filesystem::path cacheBase = applicationCache / L"build";
         std::vector<std::string> texRoots;
         const std::wstring configured = environment(L"LIGHTOVERLEAF_TEX_ROOT");
         if (!configured.empty()) texRoots.push_back(utf8(configured));
-        if (preferencesService)
-        {
-            KResult<preferences::KPreferences> configuredPreferences = preferencesService->get();
-            if (const auto* value = std::get_if<preferences::KPreferences>(&configuredPreferences);
-                value && !value->m_texRoot.empty()) texRoots.push_back(value->m_texRoot);
-        }
-        const std::filesystem::path portable = std::filesystem::current_path() / L"texlive";
-        texRoots.push_back(utf8(portable.wstring()));
+        texRoots.push_back(utf8((moduleDirectory() / L"texlive").wstring()));
+        texRoots.push_back(utf8((std::filesystem::current_path() / L"texlive").wstring()));
+        texRoots.push_back(utf8((moduleDirectory() / L"runtime" / L"miktex").wstring()));
+        texRoots.push_back(utf8((std::filesystem::current_path() / L"runtime" / L"miktex").wstring()));
         KResult<build::KWindowsBuildAdapters> adapters = build::createWindowsBuildAdapters(
-            {root, utf8(cacheBase.wstring()), std::move(texRoots)});
+            {root, utf8(cacheBase.wstring()), std::move(texRoots), compilerRootSource});
         if (const KError* error = std::get_if<KError>(&adapters)) return *error;
         build::KWindowsBuildAdapters value =
             std::get<build::KWindowsBuildAdapters>(std::move(adapters));

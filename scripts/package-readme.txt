@@ -4,9 +4,11 @@ Extract the full LightOverLeaf directory, then run LightOverLeaf.exe inside.
 Keep all DLLs, platforms, locales, licenses and web resources beside the EXE.
 This unsigned self-extracting archive is not an installer with an uninstaller.
 
-Current scope: draft editor and native communication prototype.
-Draft cache is NOT project-file saving. TeX compilation and PDF are not ready.
-No TeX distribution is bundled or downloaded.
+Current scope: local project editing, native TeX compilation and PDF preview.
+Lite packages use a system or explicitly configured TeX root.
+Full packages include either a validated TeX Live or source-built MiKTeX runtime.
+The first start of a Full single-file package extracts its runtime and can take several minutes on a slower disk.
+The application never downloads missing TeX packages while compiling.
 Cache remains in Windows application data; this is not a portable user profile.
 
 Third-party notices are in licenses/. Qt remains dynamically replaceable.

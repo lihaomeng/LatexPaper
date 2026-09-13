@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <set>
 #include <thread>
 
 namespace lightoverleaf::build
@@ -119,13 +120,27 @@ std::wstring quote(const std::wstring& value)
 std::optional<fs::path> findNamedExecutable(const std::vector<fs::path>& roots,
     const std::wstring& name)
 {
-    for (const fs::path& root : roots)
+    const auto findInRoot = [&name](const fs::path& root) -> std::optional<fs::path>
     {
         for (const fs::path& candidate : {root / name, root / L"bin" / L"windows" / name,
-             root / L"bin" / L"win32" / name, root / L"miktex" / L"bin" / L"x64" / name})
+             root / L"bin" / L"win32" / name, root / L"miktex" / L"bin" / L"x64" / name,
+             root / L"texmfs" / L"install" / L"miktex" / L"bin" / L"x64" / name})
         {
             std::error_code error;
             if (fs::is_regular_file(candidate, error)) return fs::weakly_canonical(candidate, error);
+        }
+        return std::nullopt;
+    };
+    for (const fs::path& root : roots)
+    {
+        if (const std::optional<fs::path> found = findInRoot(root)) return found;
+        std::error_code error;
+        std::size_t inspected = 0;
+        for (fs::directory_iterator iterator(root, fs::directory_options::skip_permission_denied, error), end;
+            !error && iterator != end && inspected < 64; iterator.increment(error), ++inspected)
+        {
+            if (!iterator->is_directory(error) || error) continue;
+            if (const std::optional<fs::path> found = findInRoot(iterator->path())) return found;
         }
     }
     const DWORD required = SearchPathW(nullptr, name.c_str(), nullptr, 0, nullptr, nullptr);
@@ -141,6 +156,12 @@ std::optional<fs::path> findExecutable(const std::vector<fs::path>& roots,
     KCompilerEngine engine)
 {
     return findNamedExecutable(roots, engineName(engine));
+}
+bool isMiKTeXExecutable(const fs::path& executable)
+{
+    std::wstring value = executable.lexically_normal().native();
+    std::transform(value.begin(), value.end(), value.begin(), towlower);
+    return value.find(L"\\miktex\\bin\\") != std::wstring::npos;
 }
 void appendPipe(HANDLE pipe, std::string& output, bool& truncated,
     const std::function<void(std::string_view, bool)>& onOutput)
@@ -301,22 +322,34 @@ private:
 class KWindowsCompilerBackend final : public IKCompilerBackend
 {
 public:
-    KWindowsCompilerBackend(fs::path cache, std::vector<fs::path> roots)
-        : m_cache(std::move(cache)), m_roots(std::move(roots)) {}
+    KWindowsCompilerBackend(fs::path cache, std::vector<fs::path> roots,
+        std::shared_ptr<const IKCompilerRootSource> rootSource)
+        : m_cache(std::move(cache)), m_roots(std::move(roots)), m_rootSource(std::move(rootSource)) {}
     KResult<std::vector<KDetectedCompiler>> detect(std::stop_token stop) override
     {
         if (stop.stop_requested()) return KError{KErrorCode::Cancelled, "build.cancelled", true};
+        const std::vector<fs::path> roots = compilerRoots();
         std::vector<KCompilerEngine> engines;
+        bool miktex = false;
         for (const KCompilerEngine engine : {KCompilerEngine::PdfLatex, KCompilerEngine::XeLatex, KCompilerEngine::LuaLatex})
-            if (findExecutable(m_roots, engine)) engines.push_back(engine);
+        {
+            if (const std::optional<fs::path> executable = findExecutable(roots, engine))
+            {
+                engines.push_back(engine);
+                miktex = miktex || isMiKTeXExecutable(*executable);
+            }
+        }
         if (engines.empty()) return std::vector<KDetectedCompiler>{};
-        const bool latexmk = findNamedExecutable(m_roots, L"latexmk.exe").has_value();
-        return std::vector<KDetectedCompiler>{{"windows-tex", latexmk ?
-            "Windows TeX (latexmk)" : "Windows TeX", std::move(engines)}};
+        const bool latexmk = findNamedExecutable(roots, L"latexmk.exe").has_value();
+        const std::string toolchainId = miktex ? "miktex" : "windows-tex";
+        const std::string displayName = miktex ? (latexmk ? "MiKTeX (latexmk)" : "MiKTeX") :
+            (latexmk ? "Windows TeX (latexmk)" : "Windows TeX");
+        return std::vector<KDetectedCompiler>{{toolchainId, displayName, std::move(engines)}};
     }
     KResult<KCompilerRunResult> run(const KCompilerRun& command, std::stop_token stop) override
     {
-        const std::optional<fs::path> executable = findExecutable(m_roots, command.m_engine);
+        const std::vector<fs::path> roots = compilerRoots();
+        const std::optional<fs::path> executable = findExecutable(roots, command.m_engine);
         if (!executable) return KCompilerRunResult{KCompilerTerminal::CompilerUnavailable, -1,
             "compiler not found", false, {}};
         const fs::path working = m_cache / fromUtf8(command.m_snapshotId);
@@ -336,7 +369,8 @@ public:
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         if (!SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
             return KError{KErrorCode::Unavailable, "build.processFailure", true};
-        const std::optional<fs::path> latexmk = findNamedExecutable(m_roots, L"latexmk.exe");
+        const std::optional<fs::path> latexmk = findNamedExecutable(roots, L"latexmk.exe");
+        const bool miktex = isMiKTeXExecutable(*executable);
         const fs::path launcher = latexmk.value_or(*executable);
         std::wstring commandLine = quote(launcher.wstring());
         if (latexmk)
@@ -350,6 +384,7 @@ public:
         {
             commandLine += L" -interaction=nonstopmode -halt-on-error -file-line-error"
                 L" -no-shell-escape -synctex=1 ";
+            if (miktex) commandLine += L"--disable-installer ";
         }
         commandLine += quote(fromUtf8(command.m_mainFileId));
         STARTUPINFOW startup{}; startup.cb = sizeof(startup);
@@ -404,8 +439,52 @@ public:
         return result;
     }
 private:
+    std::vector<fs::path> compilerRoots() const
+    {
+        std::vector<fs::path> result;
+        if (m_rootSource)
+        {
+            for (const std::string& root : m_rootSource->roots())
+            {
+                const std::wstring wide = fromUtf8(root);
+                if (!wide.empty()) result.emplace_back(wide);
+            }
+        }
+        result.insert(result.end(), m_roots.begin(), m_roots.end());
+        const auto appendEnvironmentRoot = [&result](const wchar_t* variable,
+            const fs::path& suffix)
+        {
+            const DWORD required = GetEnvironmentVariableW(variable, nullptr, 0);
+            if (required == 0 || required > 32768) return;
+            std::wstring value(required, L'\0');
+            const DWORD written = GetEnvironmentVariableW(variable, value.data(), required);
+            if (written == 0 || written >= required) return;
+            value.resize(written);
+            fs::path base(value);
+            if (value.size() == 2 && value[1] == L':') base /= L"\\";
+            result.push_back(base / suffix);
+        };
+        appendEnvironmentRoot(L"SystemDrive", L"texlive");
+        appendEnvironmentRoot(L"ProgramFiles", L"MiKTeX");
+        appendEnvironmentRoot(L"LOCALAPPDATA", fs::path(L"Programs") / L"MiKTeX");
+        appendEnvironmentRoot(L"LOCALAPPDATA", L"MiKTeX");
+        appendEnvironmentRoot(L"APPDATA", L"TinyTeX");
+        std::set<std::wstring> seen;
+        std::vector<fs::path> unique;
+        unique.reserve(result.size());
+        for (const fs::path& root : result)
+        {
+            std::wstring key = root.lexically_normal().native();
+            std::transform(key.begin(), key.end(), key.begin(), towlower);
+            if (!key.empty() && seen.insert(std::move(key)).second) unique.push_back(root);
+        }
+        return unique;
+    }
+
+private:
     fs::path m_cache;
     std::vector<fs::path> m_roots;
+    std::shared_ptr<const IKCompilerRootSource> m_rootSource;
 };
 
 KResult<KWindowsBuildAdapters> createWindowsBuildAdapters(const KWindowsBuildOptions& options)
@@ -433,7 +512,8 @@ KResult<KWindowsBuildAdapters> createWindowsBuildAdapters(const KWindowsBuildOpt
         }
         KWindowsBuildAdapters result;
         result.m_snapshots = std::make_shared<KLocalBuildSnapshotStore>(workspace, cache);
-        result.m_compiler = std::make_shared<KWindowsCompilerBackend>(cache, std::move(roots));
+        result.m_compiler = std::make_shared<KWindowsCompilerBackend>(cache, std::move(roots),
+            options.m_texRootSource);
         return result;
     }
     catch (...) { return KError{KErrorCode::Unavailable, "build.adapterFailure", true}; }

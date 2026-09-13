@@ -80,6 +80,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .preview-toolbar { height: 37px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 9px; gap: 10px; border-bottom: 1px solid #424e5f; }
 .compile-button { display: flex; align-items: center; gap: 7px; background: #4e6556; border: 1px solid #6f8b76; border-radius: 4px; padding: 4px 8px; font-size: 11px; color: #d3e9d7; white-space: nowrap; }
 .compile-button span { border-left: 1px solid #718977; padding-left: 7px; }
+.preview-action { margin-top: 12px; border: 1px solid #6f8b76; border-radius: 4px; background: #3f5948; color: #d3e9d7; padding: 7px 12px; }
 .preview-tabs { display: flex; gap: 8px; height: 100%; }
 .preview-tabs button { font-size: 10px; padding: 0 3px; color: #a2b1c2; border-bottom: 2px solid transparent; white-space: nowrap; }
 .preview-tabs button[aria-selected=true] { color: #dce7ed; border-bottom-color: #89a894; }

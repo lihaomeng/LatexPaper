@@ -6,7 +6,7 @@
 | 目标平台 | Windows 10/11 x64 |
 | 技术栈 | C++20、Qt 5.15、CEF、React、TypeScript、Monaco、PDF.js、CMake |
 | 产品形态 | 本地单用户、离线优先的桌面 LaTeX 编辑器 |
-| 更新日期 | 2026-09-10 |
+| 更新日期 | 2026-09-13 |
 
 ## 1. 文档定位
 
@@ -711,9 +711,10 @@ Build 模块不读取 Monaco 状态，也不直接询问 React。编译输入必
 发现顺序：
 
 1. 用户明确配置的 TeX Root。
-2. 可选 Portable TeX Live。
-3. 系统 TeX Live。
-4. 系统 MiKTeX。
+2. 应用旁 `runtime/miktex` 源码构建 Runtime。
+3. 可选 Portable TeX Live。
+4. 系统 TeX Live。
+5. 系统 MiKTeX。
 
 找不到编译器时，编辑、保存和项目管理仍可用，并返回 `COMPILER_NOT_FOUND` 与配置入口。
 
@@ -898,9 +899,11 @@ web/src/
 ### 21.3 发布形态
 
 - Lite：不包含 Portable TeX，使用用户配置或系统 TeX。
-- Full：后续可选包含 Portable TeX。
+- Full：包含且只包含一个经过验证的 TeX Runtime，可选 Portable TeX Live 或独立源码构建的 MiKTeX。
 
 两种发布形态使用相同 `IKCompilerBackend` 和 Application，差异只存在于 Composition Root、安装内容和能力报告中。
+
+MiKTeX 源码必须在独立工作区构建并安装到隔离目录，不得作为 LightOverLeaf 默认 CMake 子目录或业务静态库。Full 打包只消费安装后的 Runtime；运行时禁止自动下载缺失宏包。构建、来源校验、宏包准备和打包流程见 [MiKTeX 源码构建与集成](MiKTeX源码构建与集成.md)。
 
 ## 22. 分阶段实施计划
 
@@ -956,14 +959,14 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 更新日期：2026-09-12。本节区分计划与已实现代码，不降低前述验收要求。
 
 - M0：架构骨架、显式 Target、依赖检查、契约生成和双语言 Fixture 已建立，历史验证见 `docs/acceptance/M0.md`。
-- M1：Qt/CEF 外壳新增独立纯 C++ 生命周期策略、两次 Renderer 恢复上限、加载与关闭超时。Qt 只依赖浏览器端口；CEF 不调用 Qt 实现。当前 Smoke 覆盖草稿工作台就绪与重载，不承诺未保存原生项目文档恢复。
+- M1：Qt/CEF 外壳新增独立纯 C++ 生命周期策略、两次 Renderer 恢复上限、加载与关闭超时。Qt 只依赖浏览器端口；CEF 不调用 Qt 实现。CEF 子窗口通过父 HWND 的原生客户区尺寸适配 Qt 高 DPI，不把逻辑像素直接用于 Win32 子窗口。当前 Smoke 覆盖草稿工作台就绪与重载，不承诺未保存原生项目文档恢复。
 - M2：React/Vite 与离线资源加载可运行；开发模式允许 Fake，桌面生产模式要求真实 CEF 通道。用户已授权仅放开 style-src-attr，Monaco 行定位已修复且浏览器视觉复验通过；桌面完整视觉、中文 IME 与 Worker 执行证据仍需补齐。PDF Worker 在 M6 接入，不声称全部资源类型已验收。
 - M3：System RPC 基线已验收。会话逻辑提取到纯 C++ KRpcEndpoint，CEF/Loopback 运行共用替换场景，真实跨进程取消与 Renderer 恢复通过双配置桌面测试；见 `docs/acceptance/M3-endpoint-substitution.md`。
 - M4：独立 Workspace/Document 已接通本地项目、多标签保存和冲突恢复；文件与目录管理、带索引回收恢复、冲突三方合并、原子非覆盖另存以及 Windows 原生变化通知驱动的安全刷新均已贯通。文件、目录、回收、刷新与另存使用独立 DTO、Store 方法和 RPC Schema；Dirty、并发编辑和旧会话结果不得覆盖。真实 CEF Renderer 的 4 MiB 保存/读取逐字节往返已通过；特权 Reparse Point/极端长路径/崩溃中断夹具及可见桌面中文 IME 仍是环境/人工验收项，最新证据见 `docs/acceptance/M4-document-core.md`。
-- M5：Search/Build 的端口、快照、latexmk 优先与直接引擎回退、Windows 进程后端、取消、超时、实时有界状态/日志和分级诊断已贯通；本机无 TeX，真实论文编译与 BibTeX/Biber 编排仍待外部环境验收。
+- M5：Search/Build 的端口、快照、latexmk 优先与直接引擎回退、Windows 进程后端、取消、超时、实时有界状态/日志和分级诊断已贯通；源码版 MiKTeX XeLaTeX 已真实生成 PDF 与 SyncTeX。完整论文宏包、BibTeX/Biber 编排和干净机流程仍待发布级验收。
 - M6：Preview Artifact、分块 RPC、PDF.js 离线 Worker、50%～300% 缩放、编辑器/PDF 双向定位和 Windows SyncTeX 命令适配器已贯通。真实适配器通过私有临时目录物化 PDF/`.synctex.gz`、无 Shell 启动、Job Object、超时、输出上限和严格解析；Basic Fake 仅用于测试，生产无命令时使用 Unavailable Adapter。Artifact 缓存有 ID 校验、并发保护及 20 项/512 MiB 治理。运行时只在发现 `synctex.exe` 后报告 `syncTex=true`；本机无 TeX，真实论文端到端仍待外部环境验收。
 - M7：Preferences/Session 独立模块、SQLite Adapter、RPC、设置页、新建项目、保存后 900 ms 自动编译，以及布局/标签/编辑区宽度/光标/PDF 缩放恢复和最近项目已贯通；可见 CEF 窗口人工复验待补。
-- M8：Lite 单文件可运行 EXE 已生成并直接 smoke 通过；Full 脚本已建立，但缺少 Portable TeX 外部载荷。代码签名与干净虚拟机人工验收仍待完成。
+- M8：Lite 与源码版 MiKTeX Full 单文件可运行 EXE 均已生成并直接 smoke 通过；外层使用静态运行库的原生 Windows GUI 启动器和隐藏的 7-Zip 子进程，不执行 `.cmd` 或创建命令行窗口。Full 对 Portable TeX Live／源码构建 MiKTeX 保持二选一载荷接口。代码签名与干净虚拟机人工验收仍待完成。
 
 最新逐阶段状态、证据和产物路径统一见 `docs/development/阶段进度.md`、`docs/acceptance/性能与遗留收口.md` 与 `docs/acceptance/M5-search-build.md`～`M8-release.md`，不得用本节历史段落覆盖最新验收结论。
 
