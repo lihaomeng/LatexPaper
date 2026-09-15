@@ -19,7 +19,7 @@ test('authoring RPC keeps search, detection, build and cancellation contracts se
     const result = request.method === 'search.start' ? { hits: [{ fileId: 'main.tex', line: 2,
       column: 1, preview: '中文' }], truncated: false }
       : request.method === 'build.detect' ? { toolchains: [{ toolchainId: 'tex', displayName: 'TeX',
-        engines: ['xelatex'] }] }
+        engines: ['pdflatex'] }] }
       : request.method === 'build.start' ? { jobId: request.params.jobId, terminal: 'succeeded',
         exitCode: 0, output: '', outputTruncated: false, diagnostics: [],
         artifactId: 'artifact-1', syncTexAvailable: true, generation: request.params.generation, phase: 'artifact' }
@@ -30,8 +30,8 @@ test('authoring RPC keeps search, detection, build and cancellation contracts se
   } };
   const client = new AuthoringRpcClient(new SystemRpcClient(transport));
   assert.equal((await client.search('中文')).hits[0].line, 2);
-  assert.equal((await client.detect()).toolchains[0].engines[0], 'xelatex');
-  assert.equal((await client.build('job-1', 'snapshot-1', 'main.tex', 'xelatex', 3000,
+  assert.equal((await client.detect()).toolchains[0].engines[0], 'pdflatex');
+  assert.equal((await client.build('job-1', 'snapshot-1', 'main.tex', 'pdflatex', 3000,
     [{ fileId: 'main.tex', content: '\\documentclass{article}' }])).terminal, 'succeeded');
   assert.equal((await client.status('job-1')).output, 'partial');
   assert.equal(await client.cancel('job-1'), true);

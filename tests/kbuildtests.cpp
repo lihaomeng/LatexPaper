@@ -57,9 +57,9 @@ int main()
     std::error_code error;
     fs::remove_all(base, error); fs::create_directories(workspace, error); fs::create_directories(texBin, error);
     fs::create_directories(miktexBin, error);
-    fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), texBin / L"xelatex.exe", fs::copy_options::overwrite_existing, error);
-    fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), miktexBin / L"xelatex.exe", fs::copy_options::overwrite_existing, error);
-    check(!error, "install fake xelatex fixture");
+    fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), texBin / L"pdflatex.exe", fs::copy_options::overwrite_existing, error);
+    fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), miktexBin / L"pdflatex.exe", fs::copy_options::overwrite_existing, error);
+    check(!error, "install fake pdflatex fixture");
     write(workspace / L"main.tex", "OK");
     auto rootSource = std::make_shared<KRootSource>();
     KResult<KWindowsBuildAdapters> made = createWindowsBuildAdapters(
@@ -80,10 +80,10 @@ int main()
         check(std::holds_alternative<std::vector<KCompilerCapability>>(detectedMiKTeX) &&
             std::get<std::vector<KCompilerCapability>>(detectedMiKTeX).size() == 1 &&
             std::get<std::vector<KCompilerCapability>>(detectedMiKTeX).front().m_toolchainId == "miktex" &&
-            std::get<std::vector<KCompilerCapability>>(detectedMiKTeX).front().m_displayName == "MiKTeX",
+            std::get<std::vector<KCompilerCapability>>(detectedMiKTeX).front().m_displayName == "MiKTeX pdfLaTeX",
             "source-built MiKTeX runtime detection");
         rootSource->m_roots = {utf8(tex)};
-        KResult<KBuildResult> success = builds->start({"job-ok", "snapshot-ok", "main.tex", KBuildEngine::XeLatex, 3000});
+        KResult<KBuildResult> success = builds->start({"job-ok", "snapshot-ok", "main.tex", KBuildEngine::PdfLatex, 3000});
         check(std::holds_alternative<KBuildResult>(success) &&
             std::get<KBuildResult>(success).m_terminal == KBuildTerminal::Succeeded &&
             std::get<KBuildResult>(success).m_output.find("\xef\xbf\xbd") != std::string::npos &&
@@ -99,37 +99,37 @@ int main()
         fs::copy_file(fs::path(LOL_FAKE_COMPILER_PATH), texBin / L"latexmk.exe",
             fs::copy_options::overwrite_existing, error);
         KResult<KBuildResult> latexmk = builds->start(
-            {"job-latexmk", "snapshot-latexmk", "main.tex", KBuildEngine::XeLatex, 3000});
+            {"job-latexmk", "snapshot-latexmk", "main.tex", KBuildEngine::PdfLatex, 3000});
         check(std::holds_alternative<KBuildResult>(latexmk) &&
             std::get<KBuildResult>(latexmk).m_terminal == KBuildTerminal::Succeeded &&
-            std::get<KBuildResult>(latexmk).m_output.find("launcher:latexmk") != std::string::npos,
-            "latexmk preferred when available");
+            std::get<KBuildResult>(latexmk).m_output.find("launcher:latexmk") == std::string::npos,
+            "pdflatex remains direct when latexmk is present");
         const auto& latexmkDiagnostics = std::get<KBuildResult>(latexmk).m_diagnostics;
         check(latexmkDiagnostics.size() >= 2 &&
             latexmkDiagnostics[1].m_severity == KDiagnosticSeverity::Warning,
             "diagnostic warning severity");
         write(workspace / L"main.tex", "LARGE_INVALID");
         KResult<KBuildResult> bounded = builds->start(
-            {"job-bounded", "snapshot-bounded", "main.tex", KBuildEngine::XeLatex, 3000});
+            {"job-bounded", "snapshot-bounded", "main.tex", KBuildEngine::PdfLatex, 3000});
         check(std::holds_alternative<KBuildResult>(bounded) &&
             std::get<KBuildResult>(bounded).m_terminal == KBuildTerminal::Succeeded &&
             std::get<KBuildResult>(bounded).m_output.size() <= 1024U * 1024U &&
             std::get<KBuildResult>(bounded).m_outputTruncated,
             "utf8 replacement remains inside rpc log bound");
         write(workspace / L"main.tex", "ERROR");
-        KResult<KBuildResult> failed = builds->start({"job-fail", "snapshot-fail", "main.tex", KBuildEngine::XeLatex, 3000});
+        KResult<KBuildResult> failed = builds->start({"job-fail", "snapshot-fail", "main.tex", KBuildEngine::PdfLatex, 3000});
         check(std::holds_alternative<KBuildResult>(failed) &&
             std::get<KBuildResult>(failed).m_terminal == KBuildTerminal::Failed &&
             !std::get<KBuildResult>(failed).m_diagnostics.empty(), "failed compile diagnostic");
         write(workspace / L"main.tex", "SLOW");
         const auto before = std::chrono::steady_clock::now();
-        KResult<KBuildResult> timed = builds->start({"job-timeout", "snapshot-timeout", "main.tex", KBuildEngine::XeLatex, 1000});
+        KResult<KBuildResult> timed = builds->start({"job-timeout", "snapshot-timeout", "main.tex", KBuildEngine::PdfLatex, 1000});
         check(std::holds_alternative<KBuildResult>(timed) &&
             std::get<KBuildResult>(timed).m_terminal == KBuildTerminal::TimedOut &&
             std::chrono::steady_clock::now() - before < std::chrono::seconds(3), "timeout terminates compiler job");
         KResult<KBuildResult> cancelled;
         std::jthread runner([&] { cancelled = builds->start(
-            {"job-cancel", "snapshot-cancel", "main.tex", KBuildEngine::XeLatex, 10000}); });
+            {"job-cancel", "snapshot-cancel", "main.tex", KBuildEngine::PdfLatex, 10000}); });
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
         KResult<KBuildStatus> runningStatus = builds->status("job-cancel");
         check(std::holds_alternative<KBuildStatus>(runningStatus) &&
@@ -147,6 +147,7 @@ int main()
             "cancelled build status retained");
         check(std::holds_alternative<KError>(builds->status("job-unknown")),
             "unknown build status is explicit");
+        rootSource->m_roots = {utf8(base / L"missing-tex")};
         KResult<KBuildResult> unavailable = builds->start(
             {"job-missing", "snapshot-missing", "main.tex", KBuildEngine::PdfLatex, 3000});
         check(std::holds_alternative<KBuildResult>(unavailable) &&
@@ -164,7 +165,7 @@ int main()
         auto draftBuilds = createBuilds(draftAdapters->m_snapshots,
             draftAdapters->m_compiler, draftPublisher);
         KResult<KBuildResult> draft = draftBuilds->start({"job-draft", "snapshot-draft",
-            "main.tex", KBuildEngine::XeLatex, 3000, {{"main.tex", "OK"}}});
+            "main.tex", KBuildEngine::PdfLatex, 3000, {{"main.tex", "OK"}}});
         check(std::holds_alternative<KBuildResult>(draft) &&
             std::get<KBuildResult>(draft).m_terminal == KBuildTerminal::Succeeded &&
             std::get<KBuildResult>(draft).m_artifactId == "artifact-1" &&
@@ -174,15 +175,15 @@ int main()
         KResult<KBuildResult> generationTwo;
         KResult<KBuildResult> generationThree;
         std::jthread first([&] { generationOne = draftBuilds->start({"job-generation-1",
-            "snapshot-generation-1", "main.tex", KBuildEngine::XeLatex, 10000,
+            "snapshot-generation-1", "main.tex", KBuildEngine::PdfLatex, 10000,
             {{"main.tex", "SLOW"}}, "draft-latest", 1}); });
         std::this_thread::sleep_for(std::chrono::milliseconds(120));
         std::jthread second([&] { generationTwo = draftBuilds->start({"job-generation-2",
-            "snapshot-generation-2", "main.tex", KBuildEngine::XeLatex, 10000,
+            "snapshot-generation-2", "main.tex", KBuildEngine::PdfLatex, 10000,
             {{"main.tex", "SLOW"}}, "draft-latest", 2}); });
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
         std::jthread third([&] { generationThree = draftBuilds->start({"job-generation-3",
-            "snapshot-generation-3", "main.tex", KBuildEngine::XeLatex, 3000,
+            "snapshot-generation-3", "main.tex", KBuildEngine::PdfLatex, 3000,
             {{"main.tex", "OK"}}, "draft-latest", 3}); });
         first.join(); second.join(); third.join();
         check(std::holds_alternative<KBuildResult>(generationOne) &&
@@ -195,13 +196,13 @@ int main()
             std::get<KBuildResult>(generationThree).m_phase == KBuildPhase::Artifact,
             "latest generation wins with one active and one pending slot");
         KResult<KBuildResult> stale = draftBuilds->start({"job-generation-stale",
-            "snapshot-generation-stale", "main.tex", KBuildEngine::XeLatex, 3000,
+            "snapshot-generation-stale", "main.tex", KBuildEngine::PdfLatex, 3000,
             {{"main.tex", "OK"}}, "draft-latest", 2});
         check(std::holds_alternative<KError>(stale) &&
             std::get<KError>(stale).m_code == KErrorCode::Conflict,
             "stale generation is rejected before snapshot materialization");
         KResult<KBuildResult> duplicate = draftBuilds->start({"job-duplicate",
-            "snapshot-duplicate", "main.tex", KBuildEngine::XeLatex, 3000,
+            "snapshot-duplicate", "main.tex", KBuildEngine::PdfLatex, 3000,
             {{"main.tex", "OK"}, {"MAIN.TEX", "OK"}}});
         check(std::holds_alternative<KError>(duplicate) &&
             std::get<KError>(duplicate).m_code == KErrorCode::Conflict,

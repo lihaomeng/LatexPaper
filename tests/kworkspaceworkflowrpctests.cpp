@@ -107,7 +107,7 @@ class KFakeBuilds final : public build::IKBuilds
 public:
     KResult<std::vector<build::KCompilerCapability>> detect(std::stop_token) override
     {
-        return std::vector<build::KCompilerCapability>{{"fake-tex", "Fake TeX", {build::KBuildEngine::XeLatex}}};
+        return std::vector<build::KCompilerCapability>{{"fake-tex", "Fake TeX", {build::KBuildEngine::PdfLatex}}};
     }
     KResult<build::KBuildResult> start(const build::KBuildCommand& command,
         std::stop_token) override
@@ -191,7 +191,7 @@ int main()
         {{"jobId", KValue{std::string("job-draft")}},
          {"snapshotId", KValue{std::string("snapshot-draft")}},
          {"mainFileId", KValue{std::string("main.tex")}},
-         {"engine", KValue{std::string("xelatex")}},
+         {"engine", KValue{std::string("pdflatex")}},
          {"timeoutMs", KValue{3000.0}},
          {"overlayFiles", KValue{draftOverlay}},
          {"scopeId", KValue{std::string("draft-scope")}},
@@ -261,7 +261,7 @@ int main()
     check(v2::validateBuildDetectResponse(response), "build detection response");
     response = handler.dispatch(request("build", "build.start",
         {{"jobId", KValue{std::string("job-1")}}, {"snapshotId", KValue{std::string("snapshot-1")}},
-         {"mainFileId", KValue{std::string("main.tex")}}, {"engine", KValue{std::string("xelatex")}},
+         {"mainFileId", KValue{std::string("main.tex")}}, {"engine", KValue{std::string("pdflatex")}},
          {"timeoutMs", KValue{3000.0}}, {"overlayFiles", KValue{KValue::KArray{}}}, {"scopeId", KValue{std::string("project-scope")}}, {"generation", KValue{1.0}}}), std::nullopt, {});
     check(v2::validateBuildStartResponse(response), "build start response");
     response = handler.dispatch(request("status", "build.status",
@@ -286,7 +286,7 @@ int main()
     check(v2::validatePreferencesGetResponse(response), "preferences get response");
     response = handler.dispatch(request("preferences-update", "preferences.update",
         {{"texRoot", KValue{std::string("D:/texlive")}},
-         {"engine", KValue{std::string("lualatex")}}, {"timeoutMs", KValue{45000.0}},
+         {"engine", KValue{std::string("pdflatex")}}, {"timeoutMs", KValue{45000.0}},
          {"compileMode", KValue{"live"}}}), std::nullopt, {});
     check(v2::validatePreferencesGetResponse(response), "preferences update response");
     response = handler.dispatch(request("session-save", "session.save",

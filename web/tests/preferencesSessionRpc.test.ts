@@ -11,7 +11,7 @@ test('preferences and session RPC methods remain separate and validated', async 
     const base = { version: 2, id: request.id, clientSequence: request.clientSequence,
       ok: true, method: request.method };
     const result = request.method === 'preferences.get' || request.method === 'preferences.update'
-      ? { texRoot: request.params.texRoot ?? '', engine: request.params.engine ?? 'xelatex',
+      ? { texRoot: request.params.texRoot ?? '', engine: request.params.engine ?? 'pdflatex',
           timeoutMs: request.params.timeoutMs ?? 120000, compileMode: request.params.compileMode ?? 'live' }
       : request.method === 'session.restore'
         ? { found: true, state: { workspaceRoot: 'D:/paper', openFiles: ['main.tex'],
@@ -21,8 +21,8 @@ test('preferences and session RPC methods remain separate and validated', async 
     success(JSON.stringify({ ...base, result })); return () => {};
   } };
   const client = new PreferencesSessionRpcClient(new SystemRpcClient(transport));
-  assert.equal((await client.getPreferences()).engine, 'xelatex');
-  assert.equal((await client.updatePreferences({ texRoot: 'D:/texlive', engine: 'lualatex',
+  assert.equal((await client.getPreferences()).engine, 'pdflatex');
+  assert.equal((await client.updatePreferences({ texRoot: 'D:/texlive', engine: 'pdflatex',
     timeoutMs: 45000, compileMode: 'onSave' })).texRoot, 'D:/texlive');
   const restored = await client.restoreSession();
   assert.equal(restored.state.activeFile, 'main.tex');

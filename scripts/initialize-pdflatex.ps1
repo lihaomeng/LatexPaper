@@ -11,6 +11,7 @@ $outputLog = Join-Path $logDirectory 'pdflatex-format.stdout.log'
 $errorLog = Join-Path $logDirectory 'pdflatex-format.stderr.log'
 Write-Host 'Preparing bundled pdflatex.fmt offline (up to 180 seconds)...'
 $process = Start-Process -FilePath (Join-Path $bin 'miktex.exe') -ArgumentList @('--disable-installer','formats','build','pdflatex','--engine','pdftex') -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $outputLog -RedirectStandardError $errorLog -PassThru
+[void]$process.Handle
 try {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     while (!$process.WaitForExit(1000)) {
@@ -19,6 +20,7 @@ try {
             throw "pdfLaTeX format initialization timed out. See $logDirectory"
         }
     }
+    $process.WaitForExit()
     $process.Refresh()
     if ($process.ExitCode -ne 0) {
         Get-Content -LiteralPath $errorLog -Tail 15
