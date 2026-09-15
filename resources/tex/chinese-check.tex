@@ -1,0 +1,21 @@
+\documentclass[UTF8]{ctexart}
+\usepackage{booktabs}
+\usepackage[a4paper,margin=25mm]{geometry}
+\begin{filecontents*}{references.bib}
+@book{runtimecheck, author={Example, Alice}, title={Offline Bibliography Check}, year={2026}, publisher={Example Press}}
+\end{filecontents*}
+\begin{document}
+\section{中文编译检查}
+你好，世界！这是内置中文字体与宏包的离线检查。
+\textbf{中文粗体}，{\kaishu 中文楷体}。
+\begin{tabular}{ll}
+\toprule
+项目 & 结果 \\
+\midrule
+中文表格 & 编译成功 \\
+\bottomrule
+\end{tabular}
+引用检查~\cite{runtimecheck}。
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}

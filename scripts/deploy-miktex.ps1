@@ -24,6 +24,7 @@ foreach ($file in $files) {
     $copied = Get-Item -LiteralPath (Join-Path $Destination $relative) -ErrorAction Stop
     if ($copied.Length -ne $file.Length) { throw "MiKTeX deployment size mismatch: $relative" }
 }
+& (Join-Path $PSScriptRoot 'prepare-chinese-runtime.ps1') -Root $Destination
 & (Join-Path $PSScriptRoot 'initialize-pdflatex.ps1') -Root $Destination
 Write-Host "MiKTeX Runtime deployed: $Destination ($($files.Count) files verified by size)"
 $global:LASTEXITCODE = 0

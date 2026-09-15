@@ -136,7 +136,7 @@ public:
             if (!stream) return notFound();
         }
         const std::string mime = extension == ".html" ? "text/html" :
-            extension == ".js" ? "text/javascript" : extension == ".css" ? "text/css" :
+            (extension == ".js" || extension == ".mjs") ? "text/javascript" : extension == ".css" ? "text/css" :
             extension == ".ttf" ? "font/ttf" : extension == ".woff2" ? "font/woff2" : "application/octet-stream";
         CefResponse::HeaderMap headers;
         const std::string styleSource = nonce.empty() ? "style-src 'self'; " : "style-src 'self' 'nonce-" + nonce + "'; ";

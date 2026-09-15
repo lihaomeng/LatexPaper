@@ -7,7 +7,7 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 export interface BuildView {
   state: PreviewState;
   output: string;
-  diagnostics: { fileId: string; line: number; message: string }[];
+  diagnostics: { fileId: string; line: number; message: string; severity?: string }[];
   artifactId?: string;
   pdf?: Uint8Array;
   syncTexAvailable?: boolean;
@@ -31,7 +31,9 @@ export function PreviewPanel({ build, canCompile, onCompile, onCancel, onConfigu
 }) {
   const [tab, setTab] = useState<"preview" | "log">("preview");
   const presentation = previewPresentation(build.state);
-  const { preparing, running, summary } = presentation;
+  const { preparing, running } = presentation;
+  const summary = build.state === "failed" && build.phase === "render"
+    ? "PDF 已生成，但预览失败" : presentation.summary;
   return <section className="preview-panel" aria-label="PDF 预览面板">
     <div className="preview-toolbar">
       <button className="compile-button" disabled={preparing || (!canCompile && !running)}
@@ -60,8 +62,14 @@ export function PreviewPanel({ build, canCompile, onCompile, onCancel, onConfigu
       </div>}
       <div className="preview-bottom"><span>{summary}{build.phase ? ` · ${build.phase}` : ""}</span><span>{build.generation ? `Generation ${build.generation}` : "— / —"}</span><span>{zoom}%</span></div>
     </div> : <div className="build-log" role="tabpanel"><span className="small-label">编译日志</span><p>{summary}{build.phase ? ` · 阶段 ${build.phase}` : ""}{build.pdf && build.state !== "succeeded" ? " · 继续显示上一份成功预览" : ""}</p>
-      {build.diagnostics.map((item, index) => <button className="diagnostic-row" key={`${item.fileId}:${item.line}:${index}`}
-        onClick={() => onDiagnostic(item.fileId, item.line)}>{item.fileId}:{item.line} {item.message}</button>)}
+      {build.diagnostics.map((item, index) => item.line > 0
+        ? <button className="diagnostic-row" key={`${item.fileId}:${item.line}:${index}`}
+          onClick={() => onDiagnostic(item.fileId, item.line)}>{item.fileId}:{item.line} {item.message}</button>
+        : <p key={`${item.fileId}:${index}`}>
+          {item.severity === "info" ? "说明" : item.severity === "warning" ? "警告" : "诊断"}：
+          {item.message === "No citations requested; the bibliography is intentionally empty."
+            ? "正文尚未引用文献，参考文献列表暂为空（仅显示已引用条目）。" : item.message}
+        </p>)}
       <pre>{build.output || "尚无日志。"}</pre>
       <p className="muted">编译使用不可变项目 Snapshot；不启用 Shell Escape，也不会自动联网下载宏包。</p></div>}
   </section>;

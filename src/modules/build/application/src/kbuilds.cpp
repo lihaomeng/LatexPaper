@@ -216,7 +216,7 @@ public:
                 };
                 KResult<KCompilerRunResult> executed = m_backend->run({command.m_jobId,
                     command.m_snapshotId, command.m_mainFileId, engine,
-                    static_cast<unsigned int>(remaining), passOutput}, source.get_token());
+                    static_cast<unsigned int>(remaining), passOutput, pass == 1}, source.get_token());
                 if (const KError* error = std::get_if<KError>(&executed)) { finish(); return *error; }
                 value = std::get<KCompilerRunResult>(std::move(executed));
                 if (value.m_output.size() <= kMaxBuildLogBytes - heading.size())

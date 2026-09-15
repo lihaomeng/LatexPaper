@@ -276,6 +276,10 @@ if (Test-Path -LiteralPath $initexmf -PathType Leaf) {
     Invoke-Checked $initexmf @('--set-config-value=[MPM]AutoInstall=0')
 }
 
+if (!$SkipPackageProvision -and $PackageSet -ne 'none') {
+    & (Join-Path $PSScriptRoot 'prepare-chinese-runtime.ps1') -Root $InstallRoot -AllowDownload
+}
+
 $provenance = [ordered]@{
     product = 'MiKTeX'
     version = $Version

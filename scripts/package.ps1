@@ -75,6 +75,7 @@ try {
     $runtimeRoot = Join-Path $distribution 'runtime'
     New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
     Copy-Item -LiteralPath $MiKTeXRoot -Destination (Join-Path $runtimeRoot 'miktex') -Recurse
+    & (Join-Path $PSScriptRoot 'prepare-chinese-runtime.ps1') -Root (Join-Path $runtimeRoot 'miktex')
     & (Join-Path $PSScriptRoot 'initialize-pdflatex.ps1') -Root (Join-Path $runtimeRoot 'miktex')
     $licenses = Join-Path $distribution 'licenses'
     New-Item -ItemType Directory -Path $licenses -Force | Out-Null

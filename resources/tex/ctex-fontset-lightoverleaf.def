@@ -1,0 +1,12 @@
+% Portable Arphic Type 1 fonts supplied by the MiKTeX arphic package.
+% No proprietary Windows fonts are copied or required.
+\ExplSyntaxOn
+\tl_set:Nn \CJKrmdefault { gbsn }
+\tl_set:Nn \CJKsfdefault { gbsn }
+\tl_set:Nn \CJKttdefault { gkai }
+\NewDocumentCommand \songti { } { \CJKfamily { gbsn } }
+\NewDocumentCommand \heiti { } { \CJKfamily { gbsn } \bfseries }
+\NewDocumentCommand \fangsong { } { \CJKfamily { gbsn } }
+\NewDocumentCommand \kaishu { } { \CJKfamily { gkai } }
+
+\ExplSyntaxOff

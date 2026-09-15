@@ -33,6 +33,7 @@ struct KCompilerRun
     KCompilerEngine m_engine = KCompilerEngine::PdfLatex;
     unsigned int m_timeoutMs = 120000;
     std::function<void(std::string_view, bool)> m_onOutput;
+    bool m_firstPass = true;
 };
 struct KCompilerRunResult
 {

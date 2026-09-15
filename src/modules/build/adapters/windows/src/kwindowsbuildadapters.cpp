@@ -481,18 +481,63 @@ public:
             return state;
         };
         const auto previousAuxiliary = auxiliaryState();
-        SECURITY_ATTRIBUTES attributes{sizeof(attributes), nullptr, TRUE};
-        HANDLE readRaw = nullptr, writeRaw = nullptr;
-        if (!CreatePipe(&readRaw, &writeRaw, &attributes, 0))
-            return KError{KErrorCode::Unavailable, "build.pipeFailure", true};
-        KHandle readPipe(readRaw), writePipe(writeRaw);
-        SetHandleInformation(readPipe.value, HANDLE_FLAG_INHERIT, 0);
-        KHandle job(CreateJobObjectW(nullptr, nullptr));
-        if (!job.value) return KError{KErrorCode::Unavailable, "build.processFailure", true};
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        if (!SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
-            return KError{KErrorCode::Unavailable, "build.processFailure", true};
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(command.m_timeoutMs);
+        const auto execute = [&](const fs::path& launcher, std::wstring commandLine,
+            const std::string& prefix) -> KResult<KCompilerRunResult>
+        {
+            if (stop.stop_requested())
+                return KCompilerRunResult{KCompilerTerminal::Cancelled, -1, prefix, false, {}};
+            if (std::chrono::steady_clock::now() >= deadline)
+                return KCompilerRunResult{KCompilerTerminal::TimedOut, -1, prefix, false, {}};
+            SECURITY_ATTRIBUTES attributes{sizeof(attributes), nullptr, TRUE};
+            HANDLE readRaw = nullptr, writeRaw = nullptr;
+            if (!CreatePipe(&readRaw, &writeRaw, &attributes, 0))
+                return KError{KErrorCode::Unavailable, "build.pipeFailure", true};
+            KHandle readPipe(readRaw), writePipe(writeRaw);
+            SetHandleInformation(readPipe.value, HANDLE_FLAG_INHERIT, 0);
+            KHandle job(CreateJobObjectW(nullptr, nullptr));
+            if (!job.value) return KError{KErrorCode::Unavailable, "build.processFailure", true};
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            if (!SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
+                return KError{KErrorCode::Unavailable, "build.processFailure", true};
+            STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+            startup.dwFlags = STARTF_USESTDHANDLES;
+            startup.hStdOutput = writePipe.value; startup.hStdError = writePipe.value;
+            startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+            PROCESS_INFORMATION process{};
+            if (!CreateProcessW(launcher.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
+                CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, working.c_str(), &startup, &process))
+                return KError{KErrorCode::Unavailable, "build.processFailure", true};
+            KHandle processHandle(process.hProcess), threadHandle(process.hThread);
+            if (!AssignProcessToJobObject(job.value, processHandle.value) || ResumeThread(threadHandle.value) == static_cast<DWORD>(-1))
+            { TerminateProcess(processHandle.value, 1); return KError{KErrorCode::Unavailable, "build.processFailure", true}; }
+            CloseHandle(writePipe.value); writePipe.value = nullptr;
+            KCompilerRunResult result;
+            result.m_output = prefix;
+            for (;;)
+            {
+                appendPipe(readPipe.value, result.m_output, result.m_outputTruncated, command.m_onOutput);
+                if (WaitForSingleObject(processHandle.value, 0) == WAIT_OBJECT_0) break;
+                if (stop.stop_requested())
+                { TerminateJobObject(job.value, 2); result.m_terminal = KCompilerTerminal::Cancelled; break; }
+                if (std::chrono::steady_clock::now() >= deadline)
+                { TerminateJobObject(job.value, 3); result.m_terminal = KCompilerTerminal::TimedOut; break; }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            WaitForSingleObject(processHandle.value, 2000);
+            appendPipe(readPipe.value, result.m_output, result.m_outputTruncated, command.m_onOutput);
+            DWORD exitCode = 1;
+            GetExitCodeProcess(processHandle.value, &exitCode);
+            result.m_exitCode = static_cast<int>(exitCode);
+            if (result.m_terminal != KCompilerTerminal::Cancelled && result.m_terminal != KCompilerTerminal::TimedOut)
+                result.m_terminal = exitCode == 0 ? KCompilerTerminal::Succeeded : KCompilerTerminal::Failed;
+            bool conversionTruncated = false;
+            result.m_output = safeUtf8(result.m_output, conversionTruncated);
+            result.m_outputTruncated = result.m_outputTruncated || conversionTruncated;
+            result.m_diagnostics = diagnostics(result.m_output, command.m_mainFileId);
+            return result;
+        };
         const bool miktex = isMiKTeXExecutable(*executable);
         const fs::path launcher = *executable;
         std::wstring commandLine = quote(launcher.wstring());
@@ -500,41 +545,9 @@ public:
             L" -no-shell-escape -synctex=1 ";
         if (miktex) commandLine += L"--disable-installer ";
         commandLine += quote(fromUtf8(command.m_mainFileId));
-        STARTUPINFOW startup{}; startup.cb = sizeof(startup);
-        startup.dwFlags = STARTF_USESTDHANDLES;
-        startup.hStdOutput = writePipe.value; startup.hStdError = writePipe.value;
-        startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-        PROCESS_INFORMATION process{};
-        if (!CreateProcessW(launcher.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
-            CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, working.c_str(), &startup, &process))
-            return KError{KErrorCode::Unavailable, "build.processFailure", true};
-        KHandle processHandle(process.hProcess), threadHandle(process.hThread);
-        if (!AssignProcessToJobObject(job.value, processHandle.value) || ResumeThread(threadHandle.value) == static_cast<DWORD>(-1))
-        { TerminateProcess(processHandle.value, 1); return KError{KErrorCode::Unavailable, "build.processFailure", true}; }
-        CloseHandle(writePipe.value); writePipe.value = nullptr;
-        KCompilerRunResult result;
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(command.m_timeoutMs);
-        for (;;)
-        {
-            appendPipe(readPipe.value, result.m_output, result.m_outputTruncated, command.m_onOutput);
-            if (WaitForSingleObject(processHandle.value, 0) == WAIT_OBJECT_0) break;
-            if (stop.stop_requested())
-            { TerminateJobObject(job.value, 2); result.m_terminal = KCompilerTerminal::Cancelled; break; }
-            if (std::chrono::steady_clock::now() >= deadline)
-            { TerminateJobObject(job.value, 3); result.m_terminal = KCompilerTerminal::TimedOut; break; }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        WaitForSingleObject(processHandle.value, 2000);
-        appendPipe(readPipe.value, result.m_output, result.m_outputTruncated, command.m_onOutput);
-        DWORD exitCode = 1;
-        GetExitCodeProcess(processHandle.value, &exitCode);
-        result.m_exitCode = static_cast<int>(exitCode);
-        if (result.m_terminal != KCompilerTerminal::Cancelled && result.m_terminal != KCompilerTerminal::TimedOut)
-            result.m_terminal = exitCode == 0 ? KCompilerTerminal::Succeeded : KCompilerTerminal::Failed;
-        bool conversionTruncated = false;
-        result.m_output = safeUtf8(result.m_output, conversionTruncated);
-        result.m_outputTruncated = result.m_outputTruncated || conversionTruncated;
-        result.m_diagnostics = diagnostics(result.m_output, command.m_mainFileId);
+        KResult<KCompilerRunResult> executed = execute(launcher, commandLine, {});
+        if (const KError* failure = std::get_if<KError>(&executed)) return *failure;
+        KCompilerRunResult result = std::get<KCompilerRunResult>(std::move(executed));
         if (result.m_terminal == KCompilerTerminal::Succeeded)
         {
             result.m_rerunRequired = previousAuxiliary != auxiliaryState() ||
@@ -542,13 +555,65 @@ public:
                 result.m_output.find("Please rerun LaTeX") != std::string::npos;
             const auto currentAuxiliary = auxiliaryState();
             const std::string auxiliaryText(currentAuxiliary[0].begin(), currentAuxiliary[0].end());
-            if (auxiliaryText.find("\\bibdata") != std::string::npos ||
-                result.m_output.find("Citation") != std::string::npos ||
-                fs::exists(stem.wstring() + L".bcf"))
+            const bool needsBibtex = auxiliaryText.find("\\bibdata{") != std::string::npos;
+            if (fs::exists(stem.wstring() + L".bcf"))
             {
                 result.m_diagnostics.push_back({KCompilerDiagnosticSeverity::Warning,
-                    command.m_mainFileId, 0,
-                    "References may be incomplete: automatic BibTeX/Biber processing is not supported."});
+                    command.m_mainFileId, 0, "Biber bibliography is not supported; use a BibTeX-compatible document."});
+            }
+            else if (needsBibtex && auxiliaryText.find("\\citation{") == std::string::npos &&
+                auxiliaryText.find("\\@input{") == std::string::npos)
+            {
+                result.m_diagnostics.push_back({KCompilerDiagnosticSeverity::Info,
+                    command.m_mainFileId, 0, "No citations requested; the bibliography is intentionally empty."});
+            }
+            else if (needsBibtex && command.m_firstPass)
+            {
+                // Use only the helper beside the selected engine, never a different PATH runtime.
+                const fs::path bibtex = executable->parent_path() / L"bibtex.exe";
+                if (!fs::is_regular_file(bibtex))
+                {
+                    result.m_terminal = KCompilerTerminal::Failed;
+                    result.m_diagnostics.push_back({KCompilerDiagnosticSeverity::Error,
+                        command.m_mainFileId, 0, "Bundled bibtex.exe is missing; repair the Runtime."});
+                    return result;
+                }
+                fs::path auxiliaryArgument = fromUtf8(command.m_mainFileId);
+                auxiliaryArgument.replace_extension(L".aux");
+                std::wstring bibtexCommand = quote(bibtex.wstring());
+                if (miktex) bibtexCommand += L" --disable-installer";
+                bibtexCommand += L" " + quote((fs::path(L".") / auxiliaryArgument).wstring());
+                std::string prefix = result.m_output;
+                constexpr std::string_view heading = "\n[BibTeX]\n";
+                prefix.resize(std::min(prefix.size(), kMaxBuildLogBytes - heading.size()));
+                prefix.append(heading);
+                KResult<KCompilerRunResult> bibliography = execute(bibtex, bibtexCommand, prefix);
+                if (const KError* failure = std::get_if<KError>(&bibliography)) return *failure;
+                KCompilerRunResult value = std::get<KCompilerRunResult>(std::move(bibliography));
+                value.m_outputTruncated = value.m_outputTruncated || result.m_outputTruncated ||
+                    result.m_output.size() > kMaxBuildLogBytes - heading.size();
+                if (value.m_terminal != KCompilerTerminal::Succeeded)
+                {
+                    value.m_diagnostics.push_back({KCompilerDiagnosticSeverity::Error,
+                        command.m_mainFileId, 0, "BibTeX did not finish successfully; see the BibTeX log."});
+                    return value;
+                }
+                const auto bibliographyFile = readBoundedFile(stem.wstring() + L".bbl", kMaxBuildLogBytes);
+                if (!std::holds_alternative<std::vector<std::uint8_t>>(bibliographyFile) ||
+                    std::get<std::vector<std::uint8_t>>(bibliographyFile).empty())
+                {
+                    value.m_terminal = KCompilerTerminal::Failed;
+                    value.m_diagnostics.push_back({KCompilerDiagnosticSeverity::Error,
+                        command.m_mainFileId, 0, "BibTeX did not produce a usable bibliography (.bbl)."});
+                    return value;
+                }
+                result = std::move(value);
+                result.m_rerunRequired = true;
+            }
+            else if (result.m_output.find("Citation") != std::string::npos)
+            {
+                result.m_diagnostics.push_back({KCompilerDiagnosticSeverity::Warning,
+                    command.m_mainFileId, 0, "Unresolved citations remain; check citation keys and bibliography entries."});
             }
             KResult<std::vector<std::uint8_t>> pdf = readBoundedFile(stem.wstring() + L".pdf", kMaxPdfArtifactBytes);
             if (const KError* failure = std::get_if<KError>(&pdf)) return *failure;
