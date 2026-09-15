@@ -72,6 +72,20 @@ public:
             value.m_activeColumn, value.m_previewZoom});
     }
 
+    KResult<bool> rememberWorkspace(const std::string& id, const std::string& nativePath) override
+    {
+        if (id.empty() || !validSessionText(id, 64) || nativePath.empty() || !validSessionText(nativePath, 32768))
+            return KError{KErrorCode::InvalidArgument, "session.invalid", false};
+        return m_store->rememberWorkspace(id, nativePath);
+    }
+
+    KResult<std::optional<std::string>> workspaceLocation(const std::string& id) const override
+    {
+        if (id.empty() || !validSessionText(id, 64))
+            return KError{KErrorCode::InvalidArgument, "session.invalid", false};
+        return m_store->workspaceLocation(id);
+    }
+
     KResult<std::vector<std::string>> history() const override
     {
         return m_store->history();

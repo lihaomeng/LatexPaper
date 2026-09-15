@@ -1,0 +1,31 @@
+% !TeX program = pdflatex
+% UTF-8; all experiments below are synthetic compilation fixtures.
+\documentclass[UTF8,a4paper,12pt]{ctexart}
+\usepackage{amsmath,amssymb,graphicx,booktabs,geometry,longtable}
+\geometry{margin=25mm}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.3em}
+\renewcommand{\arraystretch}{1.15}
+\title{面向离线文档系统的合成传感器异常检测实验\\\large 多文件中文论文与参考文献编译验证样例}
+\author{LightOverLeaf 测试工作组\\\small 软件功能验证用稿，非真实科研成果}
+\date{2026 年 9 月}
+\begin{document}
+\maketitle
+\begin{abstract}
+为验证本地 LaTeX 编辑器对中文正文、数学表达、长表格、位图和参考文献的完整支持，本文构建一个可复算的合成传感器异常检测实验。研究对象为 120 个按确定性规则生成的观测点，比较固定阈值、保守残差阈值和灵敏残差阈值三种规则。通过统一的混淆矩阵和准确率、精确率、召回率及 F1 指标呈现检测差异，并提供全部逐点数据和图片生成脚本。本文的贡献是形成具有数据一致性约束的编译验证材料，而非证明某一算法在真实工业环境中的优势。所有数据均为人工合成，三条参考文献对应随项目提供的内部测试说明，不代表已发表研究。
+\end{abstract}
+\noindent\textbf{关键词：}离线编辑器；合成数据；异常检测；参考文献；编译验证
+\clearpage
+\tableofcontents
+\clearpage
+\input{sections/introduction}
+\input{sections/method}
+\input{sections/experiment}
+\input{sections/discussion}
+\clearpage
+\bibliographystyle{plain}
+\bibliography{references}
+\clearpage
+\appendix
+\input{sections/appendix}
+\end{document}

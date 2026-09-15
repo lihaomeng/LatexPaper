@@ -1,0 +1,10 @@
+[
+  { "name": "reopen registered workspace", "type": "WorkspaceReopenRequest", "accepted": true,
+    "value": { "version": 2, "id": "reopen-1", "clientSequence": 1, "method": "workspace.reopen", "params": { "workspaceId": "workspace-123" } } },
+  { "name": "reopen rejects raw path", "type": "WorkspaceReopenRequest", "accepted": false,
+    "value": { "version": 2, "id": "reopen-2", "clientSequence": 2, "method": "workspace.reopen", "params": { "workspaceId": "D:/paper1" } } },
+  { "name": "reopen rejects extra path", "type": "WorkspaceReopenRequest", "accepted": false,
+    "value": { "version": 2, "id": "reopen-3", "clientSequence": 3, "method": "workspace.reopen", "params": { "workspaceId": "workspace-123", "path": "D:/paper1" } } },
+  { "name": "reopen requires identity", "type": "WorkspaceReopenRequest", "accepted": false,
+    "value": { "version": 2, "id": "reopen-4", "clientSequence": 4, "method": "workspace.reopen", "params": {} } }
+]

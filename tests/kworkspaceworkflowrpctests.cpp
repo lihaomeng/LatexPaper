@@ -4,6 +4,7 @@
 #include <lightoverleaf/system/inbound/ikgetcapabilities.h>
 #include <lightoverleaf/workspaceworkflow/inbound/ikworkspaceworkflow.h>
 #include <iostream>
+#include <map>
 
 using namespace lightoverleaf;
 using namespace lightoverleaf::rpc;
@@ -135,6 +136,13 @@ private:
 class KFakeSessions final : public session::IKSessions
 {
 public:
+    KResult<bool> rememberWorkspace(const std::string& id, const std::string& path) override
+    { m_locations[id] = path; return true; }
+    KResult<std::optional<std::string>> workspaceLocation(const std::string& id) const override
+    {
+        const auto found = m_locations.find(id);
+        return found == m_locations.end() ? std::optional<std::string>{} : std::optional<std::string>{found->second};
+    }
     KResult<std::optional<session::KSessionState>> restore() const override { return m_value; }
     KResult<bool> save(const session::KSessionState& value) override
     { m_value = value; return true; }
@@ -142,6 +150,7 @@ public:
     { return std::vector<std::string>{"D:/论文"}; }
 private:
     std::optional<session::KSessionState> m_value;
+    std::map<std::string, std::string> m_locations;
 };
 
 KValue request(const std::string& id, const std::string& method, KValue::KObject params = {},

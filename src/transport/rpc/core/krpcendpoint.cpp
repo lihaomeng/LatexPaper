@@ -66,6 +66,10 @@ public:
         // Validated build requests need preparation/publication time as well as
         // the compiler budget. Ordinary RPCs retain the short deadline.
         std::uint64_t requestTimeoutMs = 5000;
+        if (method == "workspace.open" || method == "workspace.reopen" || method == "export.selectDestination")
+        {
+            requestTimeoutMs = 300000;
+        }
         if (method == "build.start")
         {
             const auto& params = std::get<KValue::KObject>(object.at("params").m_value);

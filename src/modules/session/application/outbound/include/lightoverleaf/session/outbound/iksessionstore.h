@@ -29,5 +29,7 @@ public:
     virtual KResult<std::optional<KStoredSession>> load() const = 0;
     virtual KResult<bool> save(const KStoredSession& value) = 0;
     virtual KResult<std::vector<std::string>> history() const = 0;
+    virtual KResult<bool> rememberWorkspace(const std::string& id, const std::string& nativePath) = 0;
+    virtual KResult<std::optional<std::string>> workspaceLocation(const std::string& id) const = 0;
 };
 }

@@ -1,0 +1,39 @@
+\section{方法与数据生成}
+\label{sec:method}
+\subsection{合成信号}
+观测下标为 $i\in\{1,\ldots,120\}$，相邻观测间隔定义为 1 秒。周期基线、确定性扰动和标签分别为
+\begin{align}
+b_i &= 20+2\sin(i/8), \label{eq:baseline}\\
+\epsilon_i &= 0.6\sin(1.7i),\\
+y_i &= \begin{cases}1,& i\bmod 10=0,\\0,&\text{其他情况。}\end{cases}
+\end{align}
+在此基础上构造观测值
+\begin{equation}
+x_i=b_i+\epsilon_i+2y_i+1.6\mathbf{1}[i\bmod17=0].
+\label{eq:signal}
+\end{equation}
+最后一项是人为设置的非目标扰动，不计入异常标签。因此，标签只由下标是否为 10 的倍数决定，而不是由幅度自动决定。它刻意模拟一个简化的“高幅度不一定属于目标异常”的测试场景。公式中的三角函数使用弧度，数据计算采用双精度，CSV 仅在输出时保留六位小数。
+
+\subsection{对照检测器}
+定义残差 $r_i=|x_i-b_i|$，三种检测器为
+\begin{align}
+\hat y_i^{(A)}&=\mathbf{1}[x_i>22],\\
+\hat y_i^{(B)}&=\mathbf{1}[r_i>1.8],\\
+\hat y_i^{(C)}&=\mathbf{1}[r_i>1.55].
+\end{align}
+A 为固定阈值基线，B 为保守残差规则，C 为较灵敏的残差规则。这里 B、C 直接使用已知生成基线，并未从训练集估计趋势；这是一项有意简化的先验优势，不能据此声称它们优于真实部署中的其他方法。
+
+\subsection{评价指标}
+按真实标签为行、预测标签为列排列混淆矩阵：
+\begin{equation}
+\mathbf{M}=\begin{bmatrix}\mathrm{TN}&\mathrm{FP}\\\mathrm{FN}&\mathrm{TP}\end{bmatrix}.
+\end{equation}
+指标定义如下，所有分母为零时约定对应指标为零\cite{lolMetrics2026}：
+\begin{align}
+\mathrm{Accuracy}&=\frac{\mathrm{TP}+\mathrm{TN}}{N},&
+\mathrm{Precision}&=\frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FP}},\\
+\mathrm{Recall}&=\frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FN}},&
+F_1&=\frac{2\mathrm{TP}}{2\mathrm{TP}+\mathrm{FP}+\mathrm{FN}}.
+\label{eq:f1}
+\end{align}
+准确率可能被多数类主导，因此本文同时报告四个指标而不只选择最大的数值。该数据只有一个固定生成实例，不计算没有抽样依据的置信区间，也不进行显著性检验。

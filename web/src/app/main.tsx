@@ -23,6 +23,7 @@ import { nextBuildGeneration, buildErrorMessage } from "./buildRequest";
 const connection = createNativeConnection(import.meta.env.DEV);
 const systemConnection = createSystemConnection(import.meta.env.DEV);
 const workspaceConnection = new WorkspaceRpcClient(systemConnection);
+const workspaceOpenConnection = new WorkspaceRpcClient(createSystemConnection(import.meta.env.DEV, 305000));
 const authoringConnection = new AuthoringRpcClient(createSystemConnection(import.meta.env.DEV, 365000));
 const exportConnection = new ExportRpcClient(createSystemConnection(import.meta.env.DEV, 305000));
 const preferencesSessionConnection = new PreferencesSessionRpcClient(createSystemConnection(import.meta.env.DEV));
@@ -75,7 +76,16 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>([]);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState("");
-  const sessionRestored = useRef(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const switchingWorkspace = useRef(false);
+  const [projectNames, setProjectNames] = useState<Record<string, string>>(() => {
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem('lightoverleaf.projectNames') ?? '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      return Object.fromEntries(Object.entries(parsed).filter(([id, name]) =>
+        /^workspace-[a-zA-Z0-9-]+$/.test(id) && typeof name === 'string').slice(0, 100));
+    } catch { return {}; }
+  });
   const restoredSession = useRef<SessionSnapshot | null>(null);
   const activeBuildJob = useRef<string | null>(null);
   const buildSequence = useRef(0);
@@ -216,14 +226,13 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     return () => { active = false; events.close(); };
   }, []);
   useEffect(() => {
-    if (native !== "ready" || sessionRestored.current) return;
-    sessionRestored.current = true;
+    if (native !== "ready") return;
     let active = true;
     void Promise.all([
       preferencesSessionConnection.getPreferences(),
       preferencesSessionConnection.restoreSession(),
       preferencesSessionConnection.history(),
-    ]).then(([savedPreferences, savedSession, history]) => {
+    ]).then(async ([savedPreferences, savedSession, history]) => {
       if (!active) return;
       setPreferences(savedPreferences); setPreferencesDraft(savedPreferences);
       setRecentWorkspaces(history);
@@ -233,14 +242,16 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
         setEditorWidth(savedSession.state.editorWidth);
         setPreview(savedSession.state.previewOpen);
         setPreviewZoom(savedSession.state.previewZoom);
+        if (savedSession.state.workspaceRoot && nativeFiles)
+          await openWorkspace(savedSession.state.workspaceRoot);
       }
     }).catch(failure => {
       if (active) setSettingsError("读取设置或会话失败：" + (failure as Error).message);
-    });
+    }).finally(() => { if (active) setSessionReady(true); });
     return () => { active = false; };
   }, [native]);
   useEffect(() => {
-    if (native !== "ready" || !sessionRestored.current) return;
+    if (native !== "ready" || !sessionReady || workspaceBusy || !project) return;
     const timer = window.setTimeout(() => {
       void preferencesSessionConnection.saveSession({
         workspaceRoot: project?.workspaceId ?? "",
@@ -258,7 +269,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       }).catch(failure => setSettingsError("保存会话失败：" + (failure as Error).message));
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [native, project?.workspaceId, localSession, view.open, view.active, view.line, view.column,
+  }, [native, sessionReady, workspaceBusy, project?.workspaceId, localSession, view.open, view.active, view.line, view.column,
     sidebarWidth, editorWidth, preview, previewZoom]);
   useEffect(() => {
     if (native === "ready" && editorReady && activeStatus === "saved") document.title = "LightOverLeaf · Native Ready";
@@ -423,22 +434,31 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
         '恢复失败：' + code);
     } finally { mutationBusy.current = false; setWorkspaceBusy(false); }
   };
-const openWorkspace = async () => {
-    if (!nativeFiles || workspaceBusy || refreshInFlight.current) return;
+const openWorkspace = async (workspaceId?: string) => {
+    if (!nativeFiles || workspaceBusy || switchingWorkspace.current || mutationBusy.current || refreshInFlight.current) return;
     ++refreshSequence.current;
     if (localSession && (conflictRef.current || saveInFlight.current || localSession.getView().files.some(file => file.dirty))) {
       setLocalError("当前项目仍有未保存修改，请保存成功后再切换项目。");
       return;
     }
     ++documentOpenSequence.current;
+    ++buildSequence.current;
+    switchingWorkspace.current = true;
     setWorkspaceBusy(true); setLocalError("");
     let openedWorkspace = false;
+    let pendingSession: EditorSession | null = null;
     try {
-      const openedProject = await workspaceConnection.open();
+      if (activeBuildJob.current) {
+        await authoringConnection.cancel(activeBuildJob.current);
+        activeBuildJob.current = null;
+        setBuildView(current => ({ ...current, state: 'cancelled' }));
+      }
+      const openedProject = workspaceId ? await workspaceOpenConnection.reopen(workspaceId) : await workspaceOpenConnection.open();
       openedWorkspace = true;
       const candidates = openedProject.entries.filter(entry => !entry.directory && /\.(tex|bib|md|txt)$/i.test(entry.fileId));
       const first = candidates.find(entry => entry.fileId.toLowerCase() === "main.tex") ?? candidates[0];
       const next = new EditorSession({ files: [], open: [], active: null });
+      pendingSession = next;
       const nextRevisions = new Map<string, string>();
       const previous = restoredSession.current?.workspaceRoot === openedProject.workspaceId ? restoredSession.current : null;
       const available = new Set(candidates.map(entry => entry.fileId));
@@ -459,18 +479,35 @@ const openWorkspace = async () => {
       revisions.current = nextRevisions;
       refreshDeferred.current = false;
       setProject(openedProject); setLocalSession(next); setLocalStatus("saved");
+      pendingSession = null;
+      setFilter(""); setModal(null);
+      setRecentWorkspaces(current => [openedProject.workspaceId, ...current.filter(id => id !== openedProject.workspaceId)].slice(0, 20));
+      setProjectNames(current => {
+        const names = { ...current, [openedProject.workspaceId]: openedProject.displayName };
+        try { localStorage.setItem('lightoverleaf.projectNames', JSON.stringify(names)); } catch { /* Optional display cache. */ }
+        return names;
+      });
       setSearchHits([]); setProjectQuery(""); setSearchError("");
       setBuildView({ state: "idle", output: "", diagnostics: [] });
       setPdfTarget(null); setSelectedDirectory(null); setOutlineLine(null);
     } catch (failure) {
       const code = (failure as Error).message;
+      if (!openedWorkspace && code !== "USER_CANCELLED" && project) {
+        try { openedWorkspace = (await workspaceConnection.getState()).workspaceId !== project.workspaceId; }
+        catch { openedWorkspace = true; }
+      }
       if (openedWorkspace) {
-        void workspaceConnection.close().catch(() => {});
+        await workspaceConnection.close().catch(() => {});
+        setBuildView({ state: 'idle', output: '', diagnostics: [] }); setPdfTarget(null);
         localSessionRef.current?.dispose(); localSessionRef.current = null;
         setLocalSession(null); setProject(null); setSelectedDirectory(null); revisions.current.clear();
       }
-      if (code !== "USER_CANCELLED") setLocalError("打开本地项目失败：" + code);
-    } finally { setWorkspaceBusy(false); }
+      if (code !== "USER_CANCELLED") setLocalError("打开本地项目失败：" + code + "。请点击打开项目重新选择文件夹；旧版本记录需重新选择一次。");
+    } finally {
+      pendingSession?.dispose();
+      switchingWorkspace.current = false;
+      setWorkspaceBusy(false);
+    }
   };
   const exportDraft = async () => {
     if (!nativeFiles || workspaceBusy) return;
@@ -797,8 +834,13 @@ const openWorkspace = async () => {
     <header className="topbar">
       <a className="brand" href="#" onClick={event => { event.preventDefault(); setModal("help"); }} aria-label="关于 LightOverLeaf"><Icon name="leaf" size={23} /><span>LightOverLeaf</span></a>
       <nav className="main-menu" aria-label="主菜单">
-        <button onClick={() => void openWorkspace()} disabled={!nativeFiles || workspaceBusy}>
+        <button onClick={() => void openWorkspace()} disabled={!nativeFiles || !sessionReady || workspaceBusy}>
           {workspaceBusy ? "正在打开…" : "打开项目"}</button>
+        <select aria-label="切换最近项目" value="" disabled={!nativeFiles || !sessionReady || workspaceBusy}
+          onChange={event => { if (event.target.value) void openWorkspace(event.target.value); }}>
+          <option value="">最近项目 / 切换</option>
+          {recentWorkspaces.map(id => <option key={id} value={id}>{projectNames[id] ?? id}{id === project?.workspaceId ? '（当前）' : ''}</option>)}
+        </select>
         <button onClick={() => void exportDraft()} disabled={!nativeFiles || workspaceBusy}>导出草稿</button>
         <button onClick={() => void refreshWorkspace()} disabled={!localSession || workspaceBusy}>刷新</button>
         <button onClick={newFile} disabled={workspaceBusy}>新建</button>
@@ -925,9 +967,9 @@ const openWorkspace = async () => {
             <option value="onSave">仅保存后编译</option>
             <option value="manual">仅手动编译</option>
           </select>
-          <p>布局、打开标签与最近项目由本机 SQLite 保存。重新选择同一项目后恢复标签；不会把绝对 PDF 路径交给前端。</p>
+          <p>重启后自动恢复上次项目及标签；也可以通过“最近项目 / 切换”打开其他已授权目录。路径保存在本机 SQLite，不向前端开放任意路径访问。</p>
           <div className="recent-workspaces"><b>最近项目</b>
-            {recentWorkspaces.map(root => <code key={root}>{root}</code>)}
+            {recentWorkspaces.map(root => <button key={root} disabled={workspaceBusy || !sessionReady} onClick={() => void openWorkspace(root)}>{projectNames[root] ?? root}</button>)}
             {!recentWorkspaces.length && <span className="muted">暂无记录</span>}
           </div>
           {settingsError && <p className="error" role="alert">{settingsError}</p>}

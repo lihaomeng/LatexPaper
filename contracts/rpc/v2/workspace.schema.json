@@ -122,6 +122,20 @@
         }
       }
     },
+    "WorkspaceReopenRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "id", "clientSequence", "method", "params"],
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
+        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "method": { "type": "string", "const": "workspace.reopen" },
+        "params": { "type": "object", "additionalProperties": false,
+          "required": ["workspaceId"], "properties": {
+            "workspaceId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" }
+          } }
+      }
+    },
     "WorkspaceRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -143,7 +157,7 @@
         "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
         "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
         "ok": { "type": "boolean", "const": true },
-        "method": { "type": "string", "enum": ["workspace.open", "workspace.getState", "workspace.refresh", "workspace.manageFile", "workspace.manageDirectory", "workspace.restoreTrash"] },
+        "method": { "type": "string", "enum": ["workspace.open", "workspace.reopen", "workspace.getState", "workspace.refresh", "workspace.manageFile", "workspace.manageDirectory", "workspace.restoreTrash"] },
         "result": {
           "type": "object",
           "additionalProperties": false,
@@ -193,6 +207,7 @@
     { "$ref": "#/$defs/WorkspaceTrashListResponse" },
     { "$ref": "#/$defs/WorkspaceManageRequest" },
     { "$ref": "#/$defs/WorkspaceManageDirectoryRequest" },
+    { "$ref": "#/$defs/WorkspaceReopenRequest" },
     { "$ref": "#/$defs/WorkspaceRequest" },
     { "$ref": "#/$defs/WorkspaceStateResponse" },
     { "$ref": "#/$defs/WorkspaceClosedResponse" }

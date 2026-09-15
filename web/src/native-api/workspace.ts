@@ -41,6 +41,13 @@ export class WorkspaceRpcClient {
       throw new Error('INVALID_RESPONSE');
     return response.result;
   }
+  async reopen(workspaceId: string, signal?: AbortSignal): Promise<WorkspaceStateResponseResult> {
+    const response = await this.rpc.request({ version: 2, id: crypto.randomUUID(),
+      clientSequence: this.nextSequence(), method: 'workspace.reopen', params: { workspaceId } }, signal);
+    if (!validateWorkspaceStateResponse(response) || response.method !== 'workspace.reopen')
+      throw new Error('INVALID_RESPONSE');
+    return response.result;
+  }
   async getState(signal?: AbortSignal): Promise<WorkspaceStateResponseResult> {
     const response = await this.rpc.request({ version: 2, id: crypto.randomUUID(),
       clientSequence: this.nextSequence(), method: 'workspace.getState', params: {} }, signal);

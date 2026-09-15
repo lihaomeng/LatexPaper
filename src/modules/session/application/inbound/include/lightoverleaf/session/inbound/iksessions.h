@@ -31,6 +31,8 @@ public:
     virtual KResult<std::optional<KSessionState>> restore() const = 0;
     virtual KResult<bool> save(const KSessionState& value) = 0;
     virtual KResult<std::vector<std::string>> history() const = 0;
+    virtual KResult<bool> rememberWorkspace(const std::string& id, const std::string& nativePath) = 0;
+    virtual KResult<std::optional<std::string>> workspaceLocation(const std::string& id) const = 0;
 };
 
 std::shared_ptr<IKSessions> createSessions(std::shared_ptr<IKSessionStore> store);

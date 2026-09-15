@@ -171,12 +171,32 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
     if (method != "build.start" && method != "build.cancel") serialized.lock();
     if (method == "system.ping" || method == "system.getCapabilities")
         return dispatchSystem(request, *m_capabilities);
-    if (method == "workspace.open")
+    if (method == "workspace.open" || method == "workspace.reopen")
     {
-        if (!v2::validateWorkspaceRequest(request)) return failure(*object, "INVALID_ARGUMENT");
+        if (method == "workspace.reopen")
+        {
+            if (!v2::validateWorkspaceReopenRequest(request)) return failure(*object, "INVALID_ARGUMENT");
+            if (!m_sessions) return failure(*object, "UNAVAILABLE");
+            const auto& params = std::get<KValue::KObject>(object->at("params").m_value);
+            auto location = m_sessions->workspaceLocation(std::get<std::string>(params.at("workspaceId").m_value));
+            if (const KError* error = std::get_if<KError>(&location)) return failure(*object, errorCode(*error));
+            nativeSelection = std::get<std::optional<std::string>>(std::move(location));
+            if (!nativeSelection) return failure(*object, "NOT_FOUND");
+        }
+        else if (!v2::validateWorkspaceRequest(request)) return failure(*object, "INVALID_ARGUMENT");
         if (!nativeSelection) return failure(*object, "USER_CANCELLED");
+        if (stop.stop_requested()) return failure(*object, "CANCELLED");
         KResult<workspace::KWorkspaceState> result = m_workflow->open(*nativeSelection, stop);
         if (const KError* error = std::get_if<KError>(&result)) return failure(*object, errorCode(*error));
+        if (m_sessions)
+        {
+            auto remembered = m_sessions->rememberWorkspace(std::get<workspace::KWorkspaceState>(result).m_id, *nativeSelection);
+            if (const KError* error = std::get_if<KError>(&remembered))
+            {
+                m_workflow->close();
+                return failure(*object, errorCode(*error));
+            }
+        }
         return workspaceState(*object, method, std::get<workspace::KWorkspaceState>(std::move(result)));
     }
     if (method == "workspace.getState")

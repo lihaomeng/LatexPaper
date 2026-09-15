@@ -96,7 +96,7 @@ public:
             next.m_entries.reserve(stored.m_entries.size());
             for (KStoredWorkspaceEntry& entry : stored.m_entries)
                 next.m_entries.push_back({std::move(entry.m_fileId), entry.m_directory, entry.m_sizeBytes});
-            if (m_state) m_store->close(m_state->m_id);
+            if (m_state && m_state->m_id != next.m_id) m_store->close(m_state->m_id);
             m_state = std::move(next);
             m_selection = selection;
             return *m_state;

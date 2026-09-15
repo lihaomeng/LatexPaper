@@ -25,46 +25,35 @@ public:
     KResult<workspace::KWorkspaceState> open(const std::string& nativeSelection,
         std::stop_token stop) override
     {
-        KResult<workspace::KWorkspaceState> opened = m_workspaces->open(nativeSelection, stop);
-        if (const KError* failure = std::get_if<KError>(&opened)) return *failure;
-        m_documents.reset();
-        KResult<std::unique_ptr<document::IKDocuments>> documents = m_documentFactory(nativeSelection);
-        if (const KError* failure = std::get_if<KError>(&documents))
-        {
-            m_workspaces->close();
-            return *failure;
-        }
-        m_documents = std::move(std::get<std::unique_ptr<document::IKDocuments>>(documents));
-        if (!m_documents)
-        {
-            m_workspaces->close();
-            return KError{KErrorCode::Internal, "document.factoryFailure", false};
-        }
-        m_search.reset();
-        {
-            std::scoped_lock lock(m_buildMutex);
-            m_builds.reset();
-            m_nativeSelection.clear();
-        }
+        // Prepare every dependent service before committing the active workspace.
+        auto documents = m_documentFactory(nativeSelection);
+        if (const KError* failure = std::get_if<KError>(&documents)) return *failure;
+        auto nextDocuments = std::get<std::unique_ptr<document::IKDocuments>>(std::move(documents));
+        if (!nextDocuments) return KError{KErrorCode::Internal, "document.factoryFailure", false};
+        std::unique_ptr<search::IKSearch> nextSearch;
         if (m_searchFactory)
         {
-            KResult<std::unique_ptr<search::IKSearch>> search = m_searchFactory(nativeSelection);
-            if (const KError* failure = std::get_if<KError>(&search)) { close(); return *failure; }
-            m_search = std::move(std::get<std::unique_ptr<search::IKSearch>>(search));
-            if (!m_search) { close(); return KError{KErrorCode::Internal, "search.factoryFailure", false}; }
+            auto search = m_searchFactory(nativeSelection);
+            if (const KError* failure = std::get_if<KError>(&search)) return *failure;
+            nextSearch = std::get<std::unique_ptr<search::IKSearch>>(std::move(search));
+            if (!nextSearch) return KError{KErrorCode::Internal, "search.factoryFailure", false};
         }
+        std::shared_ptr<build::IKBuilds> nextBuilds;
         if (m_buildFactory)
         {
-            KResult<std::shared_ptr<build::IKBuilds>> builds = m_buildFactory(nativeSelection);
-            if (const KError* failure = std::get_if<KError>(&builds)) { close(); return *failure; }
-            std::shared_ptr<build::IKBuilds> nextBuilds =
-                std::get<std::shared_ptr<build::IKBuilds>>(std::move(builds));
-            if (!nextBuilds) { close(); return KError{KErrorCode::Internal, "build.factoryFailure", false}; }
-            {
-                std::scoped_lock lock(m_buildMutex);
-                m_builds = std::move(nextBuilds);
-                m_nativeSelection = nativeSelection;
-            }
+            auto builds = m_buildFactory(nativeSelection);
+            if (const KError* failure = std::get_if<KError>(&builds)) return *failure;
+            nextBuilds = std::get<std::shared_ptr<build::IKBuilds>>(std::move(builds));
+            if (!nextBuilds) return KError{KErrorCode::Internal, "build.factoryFailure", false};
+        }
+        KResult<workspace::KWorkspaceState> opened = m_workspaces->open(nativeSelection, stop);
+        if (const KError* failure = std::get_if<KError>(&opened)) return *failure;
+        m_documents = std::move(nextDocuments);
+        m_search = std::move(nextSearch);
+        {
+            std::scoped_lock lock(m_buildMutex);
+            m_builds = std::move(nextBuilds);
+            m_nativeSelection = nativeSelection;
         }
         return std::get<workspace::KWorkspaceState>(std::move(opened));
     }

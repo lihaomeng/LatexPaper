@@ -115,6 +115,42 @@ public:
         return succeeded ? KResult<bool>{true} : KResult<bool>{error()};
     }
 
+    KResult<bool> rememberWorkspace(const std::string& id, const std::string& nativePath) override
+    {
+        std::scoped_lock lock(m_mutex);
+        sqlite3_stmt* statement = nullptr;
+        constexpr char query[] = "INSERT INTO workspace_locations(id,path) VALUES(?,?) "
+            "ON CONFLICT(id) DO UPDATE SET path=excluded.path";
+        if (sqlite3_prepare_v2(m_database, query, -1, &statement, nullptr) != SQLITE_OK) return error();
+        struct KFinalize
+        {
+            sqlite3_stmt* m_statement = nullptr;
+            ~KFinalize() { sqlite3_finalize(m_statement); }
+        } finalize{statement};
+        if (sqlite3_bind_text(statement, 1, id.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
+            sqlite3_bind_text(statement, 2, nativePath.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
+            sqlite3_step(statement) != SQLITE_DONE) return error();
+        return true;
+    }
+
+    KResult<std::optional<std::string>> workspaceLocation(const std::string& id) const override
+    {
+        std::scoped_lock lock(m_mutex);
+        sqlite3_stmt* statement = nullptr;
+        if (sqlite3_prepare_v2(m_database, "SELECT path FROM workspace_locations WHERE id=?", -1,
+            &statement, nullptr) != SQLITE_OK) return error();
+        struct KFinalize
+        {
+            sqlite3_stmt* m_statement = nullptr;
+            ~KFinalize() { sqlite3_finalize(m_statement); }
+        } finalize{statement};
+        if (sqlite3_bind_text(statement, 1, id.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) return error();
+        const int status = sqlite3_step(statement);
+        if (status == SQLITE_DONE) return std::optional<std::string>{};
+        if (status != SQLITE_ROW) return error();
+        return std::optional<std::string>{reinterpret_cast<const char*>(sqlite3_column_text(statement, 0))};
+    }
+
     KResult<std::vector<std::string>> history() const override
     {
         std::scoped_lock lock(m_mutex);
@@ -159,7 +195,8 @@ KResult<std::shared_ptr<IKSessionStore>> createSqliteSessionStore(const std::str
         "active_file TEXT NOT NULL,sidebar_width INTEGER NOT NULL,editor_width INTEGER NOT NULL DEFAULT 720,"
         "preview_open INTEGER NOT NULL,active_line INTEGER NOT NULL DEFAULT 1,"
         "active_column INTEGER NOT NULL DEFAULT 1,preview_zoom INTEGER NOT NULL DEFAULT 125);"
-        "CREATE TABLE IF NOT EXISTS workspace_history(root TEXT PRIMARY KEY,last_opened INTEGER NOT NULL)";
+        "CREATE TABLE IF NOT EXISTS workspace_history(root TEXT PRIMARY KEY,last_opened INTEGER NOT NULL);"
+        "CREATE TABLE IF NOT EXISTS workspace_locations(id TEXT PRIMARY KEY,path TEXT NOT NULL)";
     const bool ready = sqlite3_exec(database, ddl, nullptr, nullptr, nullptr) == SQLITE_OK &&
         ensureColumn(database, "editor_width", "ALTER TABLE session_state ADD COLUMN editor_width INTEGER NOT NULL DEFAULT 720") &&
         ensureColumn(database, "active_line", "ALTER TABLE session_state ADD COLUMN active_line INTEGER NOT NULL DEFAULT 1") &&
