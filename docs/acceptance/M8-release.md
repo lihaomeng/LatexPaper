@@ -1,79 +1,119 @@
 # M8 发布阶段验收记录
 
 - 日期：2026-09-13
-- 状态：Lite 与源码版 MiKTeX Full 单文件 EXE 均已完成本机自动化验收
+- 当前状态：Full 绿色目录已完成本机自动化验收；干净 Windows 虚拟机人工全流程与代码签名待补
+- 现行决策：[ADR 0017](../architecture/adr/0017-full-green-directory-release.md)
 
-## Lite 产物
+## 1. 唯一发布形态
 
-```text
-D:/CodeMyself/LightOverLeaf/out/packages/lite-20260913-103955-6ca2ef54/LightOverLeaf-0.1.0-lite-win64.exe
-大小：152023040 bytes
-SHA-256：08FE4838723C1865F4528735593466583AFEC0A89894FCA12AD4E04B7A2255EC
-```
-
-最终生产组合含真实 Windows SyncTeX Adapter 与独立 Unavailable Adapter；本轮打包入口运行 `ctest`，33/33 通过。内部 7z 归档测试通过，包含 5 个目录、268 个文件；最终外层 EXE 的自动 smoke 明确退出码为 0。单文件运行时解压到唯一临时目录，启动 `LightOverLeaf.exe`，退出后清理。
-
-2026-09-13 修复旧包执行 `run.cmd` 而显示黑色命令行窗口的问题。外层包现在使用 `LightOverLeafRuntimeLauncher.exe`：该文件为 Windows GUI 子系统、静态运行库，只依赖系统 `KERNEL32.dll`/`USER32.dll`；7-Zip 通过隐藏的 `CreateProcessW` 启动，不经过 Shell。外层文件清单已验证只有 `payload.7z`、`7z.exe`、`7z.dll` 和原生启动器，不包含 `.cmd`。打包脚本同时校验启动器与最终 IExpress EXE 的 PE GUI Subsystem，并记录 `consoleLauncher=false`、`packagedSmoke=passed`。
-
-同轮修复 Qt/CEF 高 DPI 铺满问题：CEF 创建和调整子窗口时直接读取父 HWND 的原生 `GetClientRect`，避免 Qt 逻辑像素被当作 Win32 设备像素。受影响 CEF/Qt/架构测试 9/9 与完整 Release 33/33 均通过。Codex 可见界面工具因 Windows sandbox helper 错误连续两次无法启动，最终截图复验仍需用户确认。
-
-许可证目录包含 CEF、Qt Runtime 原有许可证，以及 React、React DOM、Scheduler、Monaco、PDF.js、SQLite 和 7-Zip 许可证。产物同时生成 `.sha256` 和 `package-report.json`。
-
-## Full Runtime
-
-Full 打包现要求显式提供且只提供一种 Runtime。Portable TeX Live 仍可使用：
-
-```powershell
-.\scripts\package-full.ps1 -PortableTexRoot 'D:\portable-texlive'
-```
-
-源码构建 MiKTeX 使用：
-
-```powershell
-.\scripts\build-miktex-runtime.ps1
-.\scripts\package-miktex.ps1 -MiKTeXRoot 'D:\CodeMyself\QTBest\thirdparty_install\miktex'
-```
-
-MiKTeX 会复制到 `payload/runtime/miktex`，报告记录 `texRuntimeKind=MiKTeX` 和 `texRuntimeSource=source-built`。
-
-本机源码版 Full 产物：
+当前只发布 `Full` Windows x64 绿色目录，固定内置源码构建的 MiKTeX 26.5：
 
 ```text
-D:/CodeMyself/LightOverLeaf/out/packages/full-20260913-142310-3a4e46a2/LightOverLeaf-0.1.0-full-win64.exe
-大小：426319872 bytes
-SHA-256：B039018F60A376DF935B4F0143BA5BF4911E48E89BC121B9B561FF06776306B7
+D:/CodeMyself/LightOverLeaf/out/distributions/
+  full-20260913-202937-c0a407a0/
+    package-report.json
+    LightOverLeaf-Full-win64/
+      LightOverLeaf.exe
+      runtime/miktex/
+      runtime-manifest.json
+      package-files.sha256
 ```
 
-- 内部载荷 1383 个目录、19564 个文件、1442427220 bytes，7z 压缩后 424905261 bytes；完整性测试通过。
-- `package-report.json` 记录 `runtimeFiles=19563`、`portableTexIncluded=true`、
-  `texRuntimeKind=MiKTeX`、`texRuntimeSource=source-built`、`consoleLauncher=false`、
-  `packagedSmoke=passed`。
-- 打包入口再次执行 Release CTest 33/33；最终 IExpress 外层 PE GUI Subsystem 检查和直接 EXE smoke 均通过。
-- Runtime 来源清单、真实 XeLaTeX 5172-byte PDF 与 520-byte SyncTeX 已验收。尚未执行独立干净 Windows
-  虚拟机中的人工编辑/编译/预览与代码签名，因此这些发布级外部验收仍保留。
+运行入口：
 
-## 发布限制
+```text
+D:/CodeMyself/LightOverLeaf/out/distributions/full-20260913-202937-c0a407a0/LightOverLeaf-Full-win64/LightOverLeaf.exe
+```
 
-- 当前 EXE 未进行代码签名。
-- 已完成本机构建、目录保真、解包运行时和直接单文件 smoke；尚未在独立干净 Windows 虚拟机中人工完成编辑/编译/预览全流程。
-- Lite 不含 TeX，用户需配置系统 TeX 或自备工具链；无 TeX 时应用明确报告不可用。
-- 本轮 `package-report.json` 记录 `runtimeFiles=267`（清单生成前的 Runtime 内容数），归档验证报告 268 个文件（包含随后生成的 `manifest.json`）；两者统计口径不同，不是丢失文件。
-## 2026-09-13 PDF 编译入口修复后的 Lite 包
+必须复制整个 `LightOverLeaf-Full-win64` 目录，不能只复制 EXE。运行时不创建或解压 Runtime 归档，不调用 7-Zip、tar、IExpress、CMD 或 PowerShell。
 
-- 单文件 EXE：`out/packages/lite-20260913-112357-e171003e/LightOverLeaf-0.1.0-lite-win64.exe`
-- 大小：152023040 bytes
-- SHA-256：`C099C007E73E0EBBA162BB13122E3BC16A6BB59ABF6F927049588FAECB1D3535`
-- 打包脚本再次执行 Release CTest 33/33、7-Zip 268 文件归档测试和最终外层 EXE smoke，均通过。
-- 该包是 Lite，不包含 TeX。草稿保存编译入口、动态 Root 与常见安装路径发现已经包含；真实 PDF 仍需要外部 TeX 或 Full 包的 Portable TeX 载荷。
+## 2. 生成命令
 
-## 2026-09-13 Full 包 smoke 超时误判修复
+```powershell
+.\scripts\package.ps1 -MiKTeXRoot 'D:\CodeMyself\QTBest\thirdparty_install\miktex'
+```
 
-- 用户本地 Full 打包的内部归档校验成功：19564 个文件、1442798920 bytes，压缩后
-  424923843 bytes；随后旧脚本在固定 45 秒 smoke 上限触发超时。
-- 复用同一个 `full-20260913-170208-80b3226f` EXE，以 600 秒上限隐藏运行，实际
-  46735 ms 完成并返回退出码 0。因此根因是约 1.44 GB 载荷首次解压超过 45 秒，不是归档损坏或程序启动失败。
-- `package-onefile.ps1` 的默认 smoke 上限改为 600 秒，允许 `60..1800` 秒显式覆盖；
-  Lite、Full、MiKTeX 包装脚本均透传 `-SmokeTimeoutSeconds`。
-- 真正超时时使用精确 PID 调用 `taskkill /T /F` 清理测试进程树，并保留单进程 Kill 回退；
-  报告新增 `packagedSmokeTimeoutSeconds` 和 `packagedSmokeElapsedMilliseconds`。
-- 四个 PowerShell 入口均通过解析器检查；既有 Full EXE 的延长烟测通过。
+`package-full.ps1` 与 `package-miktex.ps1` 是兼容别名。`package-lite.ps1`、`package-onefile.ps1` 与 `LightOverLeafRuntimeLauncher` 已删除。
+
+## 3. 自动化证据
+
+最终 `package-report.json`：
+
+| 字段 | 结果 |
+| --- | --- |
+| `edition` | `Full` |
+| `delivery` | `expanded-green-directory` |
+| `runtimeExtraction` | `false` |
+| `archiveCreated` | `false` |
+| `bundledArchiveTool` | `false` |
+| `texRuntimeKind` | `MiKTeX` |
+| `texRuntimeSource` | `source-built` |
+| `manifestedFiles` | 19562 |
+| `payloadBytes` | 1438298495 |
+| `manifestSha256` | `438748B5F43617312151848D55E402AFA3A82633F41BB8BCB784AE75ECE8987B` |
+| `consoleApplication` | `false` |
+| `directorySmoke` | `passed` |
+| `directorySmokeElapsedMilliseconds` | 1857 |
+
+`manifestedFiles` 与 `payloadBytes` 是生成清单前的 Runtime 内容统计；随后写入的 `runtime-manifest.json` 和 `package-files.sha256` 不自我哈希。
+
+本轮自动化结果：
+
+- 前端 ESLint、291/291 测试、TypeScript 和 Vite 生产构建通过。
+- Release C++/集成 CTest 33/33 通过。
+- Build、Windows SyncTeX、Architecture 与 Illegal Dependency 针对性回归 4/4 通过。
+- CMake 架构检查为 86 个目标；旧 Runtime Launcher 目标已移除。
+- 最终入口 PE Subsystem 为 Windows GUI，不启动黑色命令行窗口。
+- 最终目录禁止文件扫描未发现 `payload.7z`、`payload.zip` 或 `LightOverLeafRuntimeLauncher.exe`。
+- 最终目录直接执行 `LightOverLeaf.exe --smoke-test`，退出码 0，耗时 1857 ms。
+
+## 4. 真实 PDF/SyncTeX 验收
+
+使用最终目录内：
+
+```text
+runtime/miktex/texmfs/install/miktex/bin/x64/xelatex.exe
+```
+
+以 `--disable-installer -no-shell-escape -synctex=1` 编译 `tests/fixtures/tex/basic/main.tex`，退出码 0，生成：
+
+```text
+out/acceptance/full-green-20260913-194005/main.pdf        5172 bytes
+out/acceptance/full-green-20260913-194005/main.synctex.gz  538 bytes
+out/acceptance/full-green-20260913-194005/main.log         2866 bytes
+```
+
+日志含 MiKTeX “尚未检查更新”的提示，但未联网、未弹出安装器，也不影响本次 PDF 与 SyncTeX 成功生成。
+
+## 5. 严格 Runtime 边界
+
+产品装配检测到 `runtime/miktex` 后：
+
+- Build 与 SyncTeX 只使用内置 Runtime；
+- 用户设置中的旧 TeX Root、系统常见目录和 PATH 均不参与回退；
+- 支持源码版 MiKTeX 的 `texmfs/install/miktex/bin/x64` 官方布局；
+- 内置文件缺失时明确失败，不借用目标机器上的另一套 TeX。
+
+开发构建未携带 Runtime 时仍可使用注入 Root 与系统发现，以维持端口替换测试；该行为不是发布形态。
+
+## 6. 未完成的发布级外部验收
+
+- 代码签名尚未完成，`signed=false`。
+- 尚未在独立干净 Windows 虚拟机中人工完成：启动、中文路径项目、保存、编译、PDF.js 预览、正反向 SyncTeX、取消与超时。
+- 当前 Runtime 是 `basic` 宏包集合，不保证常见论文模板闭包；正式广泛分发前应以 `-PackageSet complete` 重建并复验 BibTeX/Biber、字体与典型模板。
+
+## 7. 历史方案
+
+ADR 0016 的 Lite/Full 单文件、IExpress、7-Zip 和启动时临时解压方案已被废止。旧 `out/packages` 产物仅作历史证据，不得作为当前发布版本继续分发。
+
+## 8. 目录选择与草稿编译交互修复
+
+- 日期：2026-09-13
+- 触发条件：在尚未保存为本地项目的草稿中点击“保存并编译”。
+- 已确认原因：Qt `QFileDialog` 使用空父窗口，原生目录选择器可能出现在 LightOverLeaf 后方；前端同时静默忽略 `USER_CANCELLED`，用户返回后仍看到原始空预览状态，因此表现为“点击后没有编译”。
+- 原生修复：`KQtRuntime` 在应用事件循环期间用 `QPointer<QWidget>` 观察主窗口，目录选择前激活主窗口并把它作为 `QFileDialog` 父窗口；启动失败和事件循环退出时清空观察指针。Qt 类型仍只存在于 Platform 私有实现。
+- 前端修复：增加纯 `PreviewPresentation` 状态模型和 `preparing` 状态；选择目录期间显示“等待选择目录”、禁止重复提交；取消显示“保存并编译已取消”，非空目录和导入失败显示明确错误。
+- 自动化验证：`npm.cmd run check` 通过，291/291；`desktop-release` 构建通过；Release CTest 33/33；Full 绿色目录生成及 smoke 通过。
+- 真实 TeX 验证：使用新目录内置 MiKTeX 26.5 的 `xelatex.exe` 生成 `out/acceptance/compile-ui-fix-20260913-202937/main.pdf`（4380 bytes）、`main.synctex.gz`（583 bytes）和 `main.log`（8021 bytes）。
+- 新发布目录：`out/distributions/full-20260913-202937-c0a407a0/LightOverLeaf-Full-win64`；`package-report.json` 记录 `runtimeExtraction=false`、`archiveCreated=false`、`consoleApplication=false`、`directorySmoke=passed`。
+- 未自动化项：当前环境不能自动点击 Windows 原生目录选择器，因此“对话框始终显示在主窗口前方”仍需在可见桌面执行一次人工确认；不能把编译器实测替代该项视觉验收。

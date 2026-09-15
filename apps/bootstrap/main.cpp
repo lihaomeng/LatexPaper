@@ -59,11 +59,17 @@ CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance, LPTSTR commandLine,
     const bool payloadSmoke = commandLine && std::wstring_view(commandLine).find(L"--smoke-test-payload") != std::wstring_view::npos;
     KPayloadSmokeWorkspace payloadWorkspace(payloadSmoke);
     if (payloadSmoke && !payloadWorkspace.valid()) return 2;
-    auto composition = lightoverleaf::createApplicationComposition([&qt, &payloadWorkspace, payloadSmoke]
-    {
-        if (payloadSmoke) return payloadWorkspace.selection();
-        return qt.selectWorkspace();
-    });
+    auto composition = lightoverleaf::createApplicationComposition(
+        [&qt, &payloadWorkspace, payloadSmoke]
+        {
+            if (payloadSmoke) return payloadWorkspace.selection();
+            return qt.selectWorkspace();
+        },
+        [&qt, &payloadWorkspace, payloadSmoke]
+        {
+            if (payloadSmoke) return payloadWorkspace.selection();
+            return qt.selectExportDestination();
+        });
     if (!composition) return 2;
     auto surface = lightoverleaf::createCefSurface(nativeInstance, sandbox, qt.cachePath() + (smoke ? "-smoke" : ""), qt.resourcePath(),
         composition->endpointFactory(), crashSmoke, rpcSmoke, payloadSmoke);

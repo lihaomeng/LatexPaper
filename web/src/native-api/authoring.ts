@@ -30,11 +30,13 @@ export class AuthoringRpcClient {
     return response.result;
   }
   async build(jobId: string, snapshotId: string, mainFileId: string,
-      engine: 'pdflatex' | 'xelatex' | 'lualatex', timeoutMs = 120000,
-      signal?: AbortSignal): Promise<BuildStartResponseResult> {
+      engine: 'pdflatex', timeoutMs = 120000,
+      overlayFiles: readonly { fileId: string; content: string }[] = [],
+      scopeId = jobId, generation = 1, signal?: AbortSignal): Promise<BuildStartResponseResult> {
     const response = await this.rpc.request({ version: 2, id: crypto.randomUUID(),
       clientSequence: this.nextSequence(), method: 'build.start',
-      params: { jobId, snapshotId, mainFileId, engine, timeoutMs } }, signal);
+      params: { jobId, snapshotId, mainFileId, engine, timeoutMs, scopeId, generation,
+        overlayFiles: overlayFiles.map(file => ({ ...file })) } }, signal);
     if (!validateBuildStartResponse(response)) throw new Error('INVALID_RESPONSE');
     return response.result;
   }

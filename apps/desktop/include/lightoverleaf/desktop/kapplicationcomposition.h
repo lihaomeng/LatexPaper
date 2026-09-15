@@ -24,5 +24,6 @@ private:
     std::shared_ptr<KImpl> m_impl;
 };
 
-std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspacePicker picker);
+std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspacePicker workspacePicker,
+    KWorkspacePicker exportPicker = {});
 }

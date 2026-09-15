@@ -14,6 +14,7 @@ struct KWindowsBuildOptions
     std::string m_cacheRootUtf8;
     std::vector<std::string> m_texRootsUtf8;
     std::shared_ptr<const IKCompilerRootSource> m_texRootSource;
+    bool m_allowSystemDiscovery = true;
 };
 struct KWindowsBuildAdapters
 {

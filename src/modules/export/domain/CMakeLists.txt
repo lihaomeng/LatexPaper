@@ -1,0 +1,4 @@
+add_library(lol_export_domain STATIC src/kexportpolicy.cpp)
+target_include_directories(lol_export_domain PUBLIC include)
+target_link_libraries(lol_export_domain PUBLIC lol_kernel)
+lol_register(lol_export_domain domain export)

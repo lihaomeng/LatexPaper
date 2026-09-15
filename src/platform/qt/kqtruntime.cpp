@@ -21,6 +21,7 @@ public:
     char m_name[14] = "LightOverLeaf";
     char* m_argv[2] = {m_name, nullptr};
     std::unique_ptr<QApplication> m_application;
+    QPointer<QWidget> m_dialogParent;
 };
 namespace
 {
@@ -78,19 +79,39 @@ std::string KQtRuntime::resourcePath() const
 }
 std::optional<std::string> KQtRuntime::selectWorkspace() const
 {
-    const QString selected = QFileDialog::getExistingDirectory(nullptr,
+    QWidget* const parent = m_impl->m_dialogParent.data();
+    if (parent != nullptr)
+    {
+        parent->raise();
+        parent->activateWindow();
+    }
+    const QString selected = QFileDialog::getExistingDirectory(parent,
         QStringLiteral("选择 LaTeX 项目文件夹"), QString{},
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
     if (selected.isEmpty()) return std::nullopt;
     return selected.toUtf8().toStdString();
 }
-int KQtRuntime::run(IKBrowserSurface& surface, bool smokeTest)
+std::optional<std::string> KQtRuntime::selectExportDestination() const
+{
+    QWidget* const parent = m_impl->m_dialogParent.data();
+    if (parent != nullptr)
+    {
+        parent->raise();
+        parent->activateWindow();
+    }
+    const QString selected = QFileDialog::getExistingDirectory(parent,
+        QStringLiteral("选择空目录导出项目快照"), QString{},
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (selected.isEmpty()) return std::nullopt;
+    return selected.toUtf8().toStdString();
+}int KQtRuntime::run(IKBrowserSurface& surface, bool smokeTest)
 {
     QElapsedTimer clock;
     clock.start();
     KBrowserLifecycle lifecycle;
     lifecycle.start(clock.elapsed());
     KShellWindow window(surface, lifecycle, clock);
+    m_impl->m_dialogParent = &window;
     const QPointer<KShellWindow> guard(&window);
     bool ready = false;
     int result = 0;
@@ -125,7 +146,10 @@ int KQtRuntime::run(IKBrowserSurface& surface, bool smokeTest)
     };
     window.show();
     if (!surface.start(static_cast<std::uintptr_t>(window.winId()), window.width(), window.height(), std::move(callbacks)))
+    {
+        m_impl->m_dialogParent.clear();
         return 2;
+    }
     QTimer pump;
     QObject::connect(&pump, &QTimer::timeout, &window, [&]
     {
@@ -146,6 +170,7 @@ int KQtRuntime::run(IKBrowserSurface& surface, bool smokeTest)
     pump.start(10);
     const int code = m_impl->m_application->exec();
     pump.stop();
+    m_impl->m_dialogParent.clear();
     return code != 0 ? code : (ready ? 0 : 2);
 }
 }

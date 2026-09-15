@@ -3,8 +3,19 @@ import { EditorSession } from "../features/editor";
 import { BrowserDraftRepository, CheckpointWriter } from "../features/session";
 import { starter } from "./starter";
 export type CacheStatus = "loading" | "pending" | "saving" | "saved" | "error";
+function stableDraftId(): string {
+  const key = "lightoverleaf-current-draft-id";
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing && /^draft-[a-f0-9-]{36}$/.test(existing)) return existing;
+    const created = "draft-" + crypto.randomUUID();
+    localStorage.setItem(key, created);
+    return created;
+  } catch { return "draft-" + crypto.randomUUID(); }
+}
 export function useDraftWorkspace() {
   const [session, setSession] = useState<EditorSession | null>(null);
+  const [draftId] = useState(stableDraftId);
   const [status, setStatus] = useState<CacheStatus>("loading");
   const [error, setError] = useState("");
   const writer = useRef<CheckpointWriter | null>(null);
@@ -57,6 +68,6 @@ export function useDraftWorkspace() {
     return () => { disposed = true; clearTimeout(timer); unsubscribe?.(); workspace?.dispose(); release?.(); };
   }, []);
   const save = useCallback(() => saveAction.current(), []);
-  return { session, status, error, save };
+  return { session, status, error, save, draftId };
 }
 

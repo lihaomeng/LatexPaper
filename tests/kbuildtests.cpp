@@ -153,6 +153,60 @@ int main()
             std::get<KBuildResult>(unavailable).m_terminal == KBuildTerminal::CompilerUnavailable,
             "missing engine is explicit");
     }
+    const fs::path draftCache = base / L"draft-cache";
+    KResult<KWindowsBuildAdapters> draftMade = createWindowsBuildAdapters(
+        {std::string(), utf8(draftCache), {utf8(tex)}, {}});
+    check(std::holds_alternative<KWindowsBuildAdapters>(draftMade),
+        "draft adapters allow an empty workspace root");
+    if (const auto* draftAdapters = std::get_if<KWindowsBuildAdapters>(&draftMade))
+    {
+        auto draftPublisher = std::make_shared<KPublisher>();
+        auto draftBuilds = createBuilds(draftAdapters->m_snapshots,
+            draftAdapters->m_compiler, draftPublisher);
+        KResult<KBuildResult> draft = draftBuilds->start({"job-draft", "snapshot-draft",
+            "main.tex", KBuildEngine::XeLatex, 3000, {{"main.tex", "OK"}}});
+        check(std::holds_alternative<KBuildResult>(draft) &&
+            std::get<KBuildResult>(draft).m_terminal == KBuildTerminal::Succeeded &&
+            std::get<KBuildResult>(draft).m_artifactId == "artifact-1" &&
+            !fs::exists(draftCache / L"snapshot-draft"),
+            "draft overlay compiles without a user workspace and cleans snapshot");
+        KResult<KBuildResult> generationOne;
+        KResult<KBuildResult> generationTwo;
+        KResult<KBuildResult> generationThree;
+        std::jthread first([&] { generationOne = draftBuilds->start({"job-generation-1",
+            "snapshot-generation-1", "main.tex", KBuildEngine::XeLatex, 10000,
+            {{"main.tex", "SLOW"}}, "draft-latest", 1}); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(120));
+        std::jthread second([&] { generationTwo = draftBuilds->start({"job-generation-2",
+            "snapshot-generation-2", "main.tex", KBuildEngine::XeLatex, 10000,
+            {{"main.tex", "SLOW"}}, "draft-latest", 2}); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        std::jthread third([&] { generationThree = draftBuilds->start({"job-generation-3",
+            "snapshot-generation-3", "main.tex", KBuildEngine::XeLatex, 3000,
+            {{"main.tex", "OK"}}, "draft-latest", 3}); });
+        first.join(); second.join(); third.join();
+        check(std::holds_alternative<KBuildResult>(generationOne) &&
+            std::get<KBuildResult>(generationOne).m_terminal == KBuildTerminal::Cancelled &&
+            std::holds_alternative<KBuildResult>(generationTwo) &&
+            std::get<KBuildResult>(generationTwo).m_terminal == KBuildTerminal::Cancelled &&
+            std::holds_alternative<KBuildResult>(generationThree) &&
+            std::get<KBuildResult>(generationThree).m_terminal == KBuildTerminal::Succeeded &&
+            std::get<KBuildResult>(generationThree).m_generation == 3 &&
+            std::get<KBuildResult>(generationThree).m_phase == KBuildPhase::Artifact,
+            "latest generation wins with one active and one pending slot");
+        KResult<KBuildResult> stale = draftBuilds->start({"job-generation-stale",
+            "snapshot-generation-stale", "main.tex", KBuildEngine::XeLatex, 3000,
+            {{"main.tex", "OK"}}, "draft-latest", 2});
+        check(std::holds_alternative<KError>(stale) &&
+            std::get<KError>(stale).m_code == KErrorCode::Conflict,
+            "stale generation is rejected before snapshot materialization");
+        KResult<KBuildResult> duplicate = draftBuilds->start({"job-duplicate",
+            "snapshot-duplicate", "main.tex", KBuildEngine::XeLatex, 3000,
+            {{"main.tex", "OK"}, {"MAIN.TEX", "OK"}}});
+        check(std::holds_alternative<KError>(duplicate) &&
+            std::get<KError>(duplicate).m_code == KErrorCode::Conflict,
+            "case-insensitive duplicate overlay is rejected before materialization");
+    }
     fs::remove_all(base, error);
     return failures == 0 ? 0 : 1;
 }

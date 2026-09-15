@@ -1,9 +1,11 @@
 # ADR 0016：单文件可运行 EXE 封装
 
 - 日期：2026-09-12
-- 状态：接受
+- 状态：已被 ADR 0017 取代
 
-## 决策
+本决策自 2026-09-13 起由 [ADR 0017](0017-full-green-directory-release.md) 取代。以下内容仅保留为历史记录，不得再作为发布实现依据。
+
+## 历史决策
 
 发布入口使用两层结构：内部 `payload.7z` 保留 Qt、CEF、Locales、Platforms、Web 和可选 Portable TeX 的目录树；外层 IExpress 只封装 `payload.7z`、`7z.exe`、`7z.dll` 与 `run.cmd`。启动器解压到每次唯一的 `%TEMP%` 目录，等待应用退出后清理。
 

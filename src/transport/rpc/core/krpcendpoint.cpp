@@ -63,7 +63,21 @@ public:
         }
         // Leave room for all 64 outstanding terminal events and the next admission.
         if (m_eventSequence > 9007199254740991ULL - 129) { reply({false, "RESOURCE_EXHAUSTED"}); return; }
-        const auto started = m_session.begin(std::get<std::string>(object.at("id").m_value), m_clock(), 5000);
+        // Validated build requests need preparation/publication time as well as
+        // the compiler budget. Ordinary RPCs retain the short deadline.
+        std::uint64_t requestTimeoutMs = 5000;
+        if (method == "build.start")
+        {
+            const auto& params = std::get<KValue::KObject>(object.at("params").m_value);
+            const double budget = std::get<double>(params.at("timeoutMs").m_value);
+            if (!(budget >= 1000 && budget <= 300000))
+            {
+                reply({false, "INVALID_ARGUMENT"});
+                return;
+            }
+            requestTimeoutMs = static_cast<std::uint64_t>(budget) + 60000;
+        }
+        const auto started = m_session.begin(std::get<std::string>(object.at("id").m_value), m_clock(), requestTimeoutMs);
         if (!started.m_ticket)
         {
             reply({false, started.m_status == KRequestAdmission::Duplicate ? "DUPLICATE_REQUEST" : "RESOURCE_EXHAUSTED"});

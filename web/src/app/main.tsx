@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AuthoringRpcClient, createNativeConnection, createSystemConnection, createStartupEvents,
+import { AuthoringRpcClient, ExportRpcClient, createNativeConnection, createSystemConnection, createStartupEvents,
   payloadSmokeProbe, PreferencesSessionRpcClient, WorkspaceRpcClient, type Preferences } from "../native-api";
 import type { SessionSnapshot } from "../native-api";
 import type { WorkspaceStateResponseResult, WorkspaceTrashListResponseResultEntriesItem } from "../../.generated/rpc/protocol";
@@ -17,22 +17,22 @@ import { saveConflictCopy } from "./saveConflictCopy";
 import { reconcileWorkspaceRefresh } from "./refreshLocalWorkspace";
 import { containsMergeMarkers, mergeDocumentText } from "./threeWayMerge";
 import { validWorkspaceDirectoryId } from "./workspacePaths";
-import { newProjectMain } from "./starter";
-import { draftProjectDirectories } from "./draftProject";
 import "./style.css";
+import { nextBuildGeneration, buildErrorMessage } from "./buildRequest";
 
 const connection = createNativeConnection(import.meta.env.DEV);
 const systemConnection = createSystemConnection(import.meta.env.DEV);
 const workspaceConnection = new WorkspaceRpcClient(systemConnection);
-const authoringConnection = new AuthoringRpcClient(createSystemConnection(import.meta.env.DEV, 305000));
+const authoringConnection = new AuthoringRpcClient(createSystemConnection(import.meta.env.DEV, 365000));
+const exportConnection = new ExportRpcClient(createSystemConnection(import.meta.env.DEV, 305000));
 const preferencesSessionConnection = new PreferencesSessionRpcClient(createSystemConnection(import.meta.env.DEV));
-const defaultPreferences: Preferences = { texRoot: "", engine: "xelatex", timeoutMs: 120000, autoCompile: false };
+const defaultPreferences: Preferences = { texRoot: "", engine: "pdflatex", timeoutMs: 120000, compileMode: "live" };
 const labels: Record<CacheStatus, string> = { loading: "正在读取草稿", pending: "有待缓存修改", saving: "正在缓存草稿", saved: "草稿已缓存", error: "草稿缓存失败" };
 function Tool({ icon, label, onClick, pressed, disabled }: { icon: IconName; label: string; onClick(): void; pressed?: boolean; disabled?: boolean }) {
   return <button className="tool-button" title={label} aria-label={label} aria-pressed={pressed} onClick={onClick} disabled={disabled}><Icon name={icon} /></button>;
 }
-function Workbench({ session: draftSession, status, error, save: saveDraft }: {
-  session: EditorSession; status: CacheStatus; error: string; save(): void;
+function Workbench({ session: draftSession, status, error, save: saveDraft, draftId }: {
+  session: EditorSession; status: CacheStatus; error: string; save(): void; draftId: string;
 }) {
   const [localSession, setLocalSession] = useState<EditorSession | null>(null);
   const localSessionRef = useRef<EditorSession | null>(null);
@@ -42,6 +42,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
   const [localError, setLocalError] = useState("");
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const [nativeFiles, setNativeFiles] = useState(false);
+  const [nativeBuild, setNativeBuild] = useState(false);
   const documentOpenSequence = useRef(0);
   const saveInFlight = useRef(false);
   const saveDeferred = useRef(false);
@@ -78,8 +79,9 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
   const restoredSession = useRef<SessionSnapshot | null>(null);
   const activeBuildJob = useRef<string | null>(null);
   const buildSequence = useRef(0);
-  const compileAfterProjectOpen = useRef(false);
+
   const lastAutoCompileRevision = useRef(0);
+  const lastSaveRequestedRevision = useRef(0);
   const [pdfTarget, setPdfTarget] = useState<PdfTarget | null>(null);
   const session = localSession ?? draftSession;
   const view = useSyncExternalStore(session.subscribe, session.getView);
@@ -103,6 +105,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
   const activeError = conflictFile ? `${conflictFile} 已被外部修改，自动保存已暂停。请对比版本后处理。` : localError || (localSession ? "" : error);
   const hasChanges = localSession ? view.files.some(file => file.dirty) || saveInFlight.current : activeStatus !== "saved";
   const save = useCallback(() => {
+    lastSaveRequestedRevision.current = view.revision;
     if (!localSession) { saveDraft(); return; }
     if (refreshInFlight.current) { saveDeferred.current = true; return; }
     if (mutationBusy.current || conflictRef.current || saveInFlight.current || !localSession.getView().files.some(file => file.dirty)) return;
@@ -124,7 +127,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       setLocalError(code === "FILE_CONFLICT" ? "文件已被外部修改，请使用对比版本处理冲突。" :
         "保存本地文件失败：" + code);
     }).finally(() => { saveInFlight.current = false; });
-  }, [localSession, saveDraft]);
+  }, [localSession, saveDraft, view.revision]);
   const refreshWorkspace = useCallback(async () => {
     if (!localSession || !project || workspaceBusy || refreshInFlight.current || mutationBusy.current ||
         saveInFlight.current || conflictRef.current) return;
@@ -208,7 +211,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
     })
       .then(() => systemConnection.ping())
       .then(() => systemConnection.getCapabilities())
-      .then(capabilities => { if (active && !connectionFailed) { setNativeFiles(capabilities.nativeFiles); setNative("ready"); } })
+      .then(capabilities => { if (active && !connectionFailed) { setNativeFiles(capabilities.nativeFiles); setNativeBuild(capabilities.build); setNative("ready"); } })
       .catch(() => { if (active) setNative("error"); });
     return () => { active = false; events.close(); };
   }, []);
@@ -420,7 +423,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         '恢复失败：' + code);
     } finally { mutationBusy.current = false; setWorkspaceBusy(false); }
   };
-  const openWorkspace = async (createProject = false, importDraft = false) => {
+const openWorkspace = async () => {
     if (!nativeFiles || workspaceBusy || refreshInFlight.current) return;
     ++refreshSequence.current;
     if (localSession && (conflictRef.current || saveInFlight.current || localSession.getView().files.some(file => file.dirty))) {
@@ -430,34 +433,14 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
     ++documentOpenSequence.current;
     setWorkspaceBusy(true); setLocalError("");
     let openedWorkspace = false;
-    const importedSnapshot = importDraft ? draftSession.capture().snapshot : null;
     try {
-      let openedProject = await workspaceConnection.open();
+      const openedProject = await workspaceConnection.open();
       openedWorkspace = true;
-      if (createProject) {
-        if (openedProject.entries.length) {
-          await workspaceConnection.close();
-          openedWorkspace = false;
-          throw new Error("PROJECT_DIRECTORY_NOT_EMPTY");
-        }
-        if (importedSnapshot) {
-          for (const directory of draftProjectDirectories(importedSnapshot.files.map(file => file.path)))
-            openedProject = await workspaceConnection.manageDirectory(openedProject.workspaceId, "create", directory);
-          for (const file of importedSnapshot.files)
-            await workspaceConnection.saveDocumentAs(file.path, file.content, false);
-        } else {
-          await workspaceConnection.saveDocumentAs("main.tex", newProjectMain, false);
-        }
-        openedProject = await workspaceConnection.refresh();
-      }
       const candidates = openedProject.entries.filter(entry => !entry.directory && /\.(tex|bib|md|txt)$/i.test(entry.fileId));
       const first = candidates.find(entry => entry.fileId.toLowerCase() === "main.tex") ?? candidates[0];
       const next = new EditorSession({ files: [], open: [], active: null });
       const nextRevisions = new Map<string, string>();
-      const previous = importedSnapshot ? {
-        openFiles: importedSnapshot.open, activeFile: importedSnapshot.active,
-        activeLine: 1, activeColumn: 1,
-      } : restoredSession.current?.workspaceRoot === openedProject.workspaceId ? restoredSession.current : null;
+      const previous = restoredSession.current?.workspaceRoot === openedProject.workspaceId ? restoredSession.current : null;
       const available = new Set(candidates.map(entry => entry.fileId));
       const requested = previous?.openFiles.filter(file => available.has(file)) ?? [];
       const filesToOpen = requested.length ? requested : first ? [first.fileId] : [];
@@ -478,8 +461,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       setProject(openedProject); setLocalSession(next); setLocalStatus("saved");
       setSearchHits([]); setProjectQuery(""); setSearchError("");
       setBuildView({ state: "idle", output: "", diagnostics: [] });
-      setPdfTarget(null);
-      setSelectedDirectory(null); setOutlineLine(null);
+      setPdfTarget(null); setSelectedDirectory(null); setOutlineLine(null);
     } catch (failure) {
       const code = (failure as Error).message;
       if (openedWorkspace) {
@@ -487,14 +469,27 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         localSessionRef.current?.dispose(); localSessionRef.current = null;
         setLocalSession(null); setProject(null); setSelectedDirectory(null); revisions.current.clear();
       }
-      if (code !== "USER_CANCELLED") setLocalError(code === "PROJECT_DIRECTORY_NOT_EMPTY" ?
-        "新建项目需要选择一个空目录；未修改所选目录。" : importDraft ?
-          "保存草稿为项目失败；已成功写入的内容会保留在所选目录：" + code :
-          "打开本地项目失败：" + code);
-      compileAfterProjectOpen.current = false;
+      if (code !== "USER_CANCELLED") setLocalError("打开本地项目失败：" + code);
     } finally { setWorkspaceBusy(false); }
   };
-  const openLocalFile = async (path: string) => {
+  const exportDraft = async () => {
+    if (!nativeFiles || workspaceBusy) return;
+    setWorkspaceBusy(true); setLocalError("");
+    try {
+      const destination = await exportConnection.selectDestination();
+      const capture = draftSession.capture();
+      const result = await exportConnection.exportProject(destination.destinationToken,
+        capture.revision + 1, capture.snapshot.files.map(file => ({ fileId: file.path, content: file.content })));
+      if (!result.complete) {
+        const details = result.failures.map(item => `${item.fileId || "项目"}: ${item.code}`).join("；");
+        throw new Error(details || "EXPORT_INCOMPLETE");
+      }
+      setLocalError(`草稿已原子导出到 ${destination.displayName}（${result.writtenFiles.length} 个文件）。`);
+    } catch (failure) {
+      const code = (failure as Error).message;
+      if (code !== "USER_CANCELLED") setLocalError("导出草稿失败；目标目录保持原状：" + code);
+    } finally { setWorkspaceBusy(false); }
+  };  const openLocalFile = async (path: string) => {
     if (workspaceBusy) return;
     if (!localSession) { session.activate(path); setOutlineLine(null); return; }
     if (localSession.model(path)) { localSession.activate(path); setOutlineLine(null); return; }
@@ -530,81 +525,127 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       editor.current?.reveal(line);
     }
   };
-  const compileProject = async () => {
-    if (!localSession || !project || activeBuildJob.current || conflictRef.current || refreshInFlight.current) return;
-    if (saveInFlight.current) { setLocalError("文件仍在保存，请稍后重新编译。"); return; }
-    const mainFileId = project.entries.find(item => !item.directory && item.fileId.toLowerCase() === "main.tex")?.fileId ??
-      (view.active?.toLowerCase().endsWith(".tex") ? view.active : undefined);
-    if (!mainFileId) { setBuildView({ state: "failed", output: "", diagnostics: [] }); setLocalError("未找到 main.tex 或当前 .tex 主文件。"); return; }
+  const compileCurrent = async () => {
+    const compileSession = localSession ?? draftSession;
+    const compileProject = project;
+    if (conflictRef.current || refreshInFlight.current) return;
+
+    const generation = compileSession.capture();
+    const captured = generation.snapshot;
+    const mainFileId = compileProject ?
+      compileProject.entries.find(item => !item.directory && item.fileId.toLowerCase() === "main.tex")?.fileId ??
+        (compileSession.getView().active?.toLowerCase().endsWith(".tex") ? compileSession.getView().active : undefined) :
+      captured.files.find(item => item.path.toLowerCase() === "main.tex")?.path ??
+        (captured.active?.toLowerCase().endsWith(".tex") ? captured.active : undefined);
+    if (!mainFileId) {
+      setBuildView(current => ({ ...current, state: "failed", output: "未找到 main.tex 或当前 .tex 主文件。",
+        diagnostics: [] }));
+      return;
+    }
+    const overlayFiles = captured.files.map(file =>
+      ({ fileId: file.path, content: file.content }));
+    lastAutoCompileRevision.current = Math.max(lastAutoCompileRevision.current, generation.revision);
     const sequence = ++buildSequence.current;
+    const isCurrent = () => sequence === buildSequence.current && (compileProject ?
+      localSessionRef.current === compileSession : localSessionRef.current === null);
     let logTimer: number | undefined;
     try {
-      if (localSession.getView().files.some(file => file.dirty)) {
-        saveInFlight.current = true; setLocalStatus("saving");
-        await saveLocalDocuments(localSession, revisions.current, workspaceConnection,
-          () => localSessionRef.current === localSession && sequence === buildSequence.current);
-        if (localSessionRef.current !== localSession || sequence !== buildSequence.current) return;
-        setLocalStatus("saved");
-      }
-      setBuildView({ state: "detecting", output: "", diagnostics: [] });
-      setPdfTarget(null);
+      const requestGeneration = nextBuildGeneration();
+      setBuildView(current => ({ ...current, state: "detecting", output: "", diagnostics: [], candidate: undefined, phase: "detect", generation: requestGeneration }));
       const detected = await authoringConnection.detect();
-      if (localSessionRef.current !== localSession || sequence !== buildSequence.current) return;
+      if (!isCurrent()) return;
       const engine = detected.toolchains.flatMap(item => item.engines)
         .find(item => item === preferences.engine) ?? detected.toolchains[0]?.engines[0];
-      if (!engine) { setBuildView({ state: "unavailable", output: "未检测到 TeX 编译器。请打开设置并填写 TeX 根目录，或安装 TeX Live / MiKTeX；不会自动下载宏包。", diagnostics: [] }); return; }
+      if (!engine) {
+        setBuildView(current => ({ ...current, state: "unavailable",
+          output: "未找到可用的 TeX 引擎，尚未启动编译，因此没有 TeX 日志。请确认应用旁已部署完整 runtime/miktex；开发构建请重新运行 build.ps1 --dev。不会自动下载宏包。",
+          diagnostics: [], candidate: undefined, phase: "detect", generation: requestGeneration }));
+        return;
+      }
       const token = crypto.randomUUID();
       const jobId = "job-" + token;
       activeBuildJob.current = jobId;
-      setBuildView({ state: "running", output: "", diagnostics: [] });
+      setBuildView(current => ({ ...current, state: "running", output: "", diagnostics: [], phase: "snapshot", generation: requestGeneration }));
       logTimer = window.setInterval(() => {
         void authoringConnection.status(jobId).then(status => {
-          if (localSessionRef.current !== localSession || sequence !== buildSequence.current ||
-              status.state !== "running") return;
+          if (!isCurrent() || status.state !== "running") return;
           setBuildView(current => ({ ...current, state: "running",
-            output: status.output + (status.outputTruncated ? "\n[日志已截断]" : "") }));
+            output: status.output + (status.outputTruncated ? "\n[日志已截断]" : ""),
+            phase: status.phase, generation: status.generation }));
         }).catch(() => {});
       }, 200);
-      const result = await authoringConnection.build(jobId, "snapshot-" + token, mainFileId, engine, preferences.timeoutMs);
-      if (localSessionRef.current !== localSession || sequence !== buildSequence.current) return;
+      const result = await authoringConnection.build(jobId, "snapshot-" + token,
+        mainFileId, engine, preferences.timeoutMs, overlayFiles,
+        compileProject?.workspaceId ?? draftId, requestGeneration);
+      if (!isCurrent()) return;
       const state: BuildView["state"] = result.terminal === "compilerUnavailable" ? "unavailable" : result.terminal;
-      const pdf = result.artifactId ? await authoringConnection.readPdf(result.artifactId) : undefined;
-      setBuildView({ state, output: result.output + (result.outputTruncated ? "\n[日志已截断]" : ""),
-        diagnostics: result.diagnostics.map(item => ({ fileId: item.fileId, line: item.line, message: item.message })),
-        artifactId: result.artifactId || undefined, pdf, syncTexAvailable: result.syncTexAvailable });
+      const output = result.output + (result.outputTruncated ? "\n[日志已截断]" : "");
+      const diagnostics = result.diagnostics.map(item =>
+        ({ fileId: item.fileId, line: item.line, message: item.message }));
+      if (result.artifactId) {
+        const pdf = await authoringConnection.readPdf(result.artifactId);
+        if (!isCurrent()) return;
+        setBuildView(current => ({ ...current, state: "rendering", output, diagnostics,
+          candidate: { generation: result.generation, artifactId: result.artifactId, pdf,
+            syncTexAvailable: result.syncTexAvailable }, generation: result.generation, phase: "render" }));
+      } else {
+        setBuildView(current => ({ ...current, state, output, diagnostics, candidate: undefined, generation: result.generation, phase: result.phase }));
+      }
     } catch (failure) {
-      if (localSessionRef.current === localSession && sequence === buildSequence.current)
-        setBuildView({ state: (failure as Error).message === "RPC_CANCELLED" ? "cancelled" : "failed",
-          output: (failure as Error).message, diagnostics: [] });
+      if (isCurrent())
+        setBuildView(current => ({ ...current,
+          state: (failure as Error).message === "RPC_CANCELLED" ? "cancelled" : "failed",
+          output: buildErrorMessage((failure as Error).message), diagnostics: [], candidate: undefined }));
     } finally {
       if (logTimer !== undefined) window.clearInterval(logTimer);
-      saveInFlight.current = false;
       if (sequence === buildSequence.current) activeBuildJob.current = null;
     }
   };
-  useEffect(() => {
-    if (!compileAfterProjectOpen.current || !localSession || !project) return;
-    compileAfterProjectOpen.current = false;
-    void compileProject();
-  }, [localSession, project]);
   const requestCompile = () => {
-    if (localSession && project) { void compileProject(); return; }
-    if (!nativeFiles) { setLocalError("原生文件服务尚未就绪，暂时不能创建编译项目。"); return; }
-    if (!view.active) { setLocalError("请先打开一个 LaTeX 文件。"); return; }
-    compileAfterProjectOpen.current = true;
-    void openWorkspace(true, true);
+    if (workspaceBusy || refreshInFlight.current) {
+      setLocalError("正在处理项目文件，请稍后再编译。");
+      return;
+    }
+    if (!nativeBuild) {
+      setLocalError("原生编译服务尚未就绪。");
+      return;
+    }
+    if (!view.active) {
+      setLocalError("请先打开一个 LaTeX 文件。");
+      return;
+    }
+    void compileCurrent();
   };
   useEffect(() => {
-    if (!preferences.autoCompile || !localSession || !project || activeStatus !== "saved" ||
-        activeBuildJob.current || conflictRef.current || view.revision <= lastAutoCompileRevision.current) return;
+    if (preferences.compileMode !== "live" || localSession || !view.active ||
+        view.revision <= lastAutoCompileRevision.current) return;
+    const revision = view.revision;
+    const timer = window.setTimeout(() => {
+      if (localSessionRef.current || draftSession.getView().revision !== revision) return;
+      lastAutoCompileRevision.current = revision;
+      void compileCurrent();
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [buildView.state, draftSession, localSession, preferences.compileMode, view.active, view.revision]);
+  useEffect(() => {
+    if (preferences.compileMode !== "live" || !localSession || !project ||
+        conflictRef.current || view.revision <= lastAutoCompileRevision.current) return;
     const revision = view.revision;
     const timer = window.setTimeout(() => {
       if (localSessionRef.current !== localSession || localSession.getView().revision !== revision) return;
       lastAutoCompileRevision.current = revision;
-      void compileProject();
+      void compileCurrent();
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [activeStatus, localSession, preferences.autoCompile, project, view.revision]);
+  }, [activeStatus, buildView.state, localSession, preferences.compileMode, project, view.revision]);
+  useEffect(() => {
+    const requested = lastSaveRequestedRevision.current;
+    if (preferences.compileMode !== "onSave" || activeStatus !== "saved" || !view.active ||
+        !requested || requested > view.revision || requested <= lastAutoCompileRevision.current) return;
+    lastSaveRequestedRevision.current = 0;
+    lastAutoCompileRevision.current = requested;
+    void compileCurrent();
+  }, [activeStatus, buildView.state, preferences.compileMode, view.active, view.revision]);
   const forwardSync = async () => {
     if (!buildView.artifactId || !buildView.syncTexAvailable || !view.active) return;
     try {
@@ -634,7 +675,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       const saved = await preferencesSessionConnection.updatePreferences(preferencesDraft);
       setPreferences(saved); setPreferencesDraft(saved); setModal(null);
       if (saved.texRoot !== preferences.texRoot)
-        setLocalError("TeX 根目录已保存；当前项目下次编译会立即重新发现工具链。");
+        setLocalError("编译设置已保存；当前项目下次编译会使用内置 MiKTeX Runtime。");
     } catch (failure) {
       setSettingsError("保存设置失败：" + (failure as Error).message);
     } finally { setSettingsBusy(false); }
@@ -758,7 +799,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       <nav className="main-menu" aria-label="主菜单">
         <button onClick={() => void openWorkspace()} disabled={!nativeFiles || workspaceBusy}>
           {workspaceBusy ? "正在打开…" : "打开项目"}</button>
-        <button onClick={() => void openWorkspace(true)} disabled={!nativeFiles || workspaceBusy}>新建项目</button>
+        <button onClick={() => void exportDraft()} disabled={!nativeFiles || workspaceBusy}>导出草稿</button>
         <button onClick={() => void refreshWorkspace()} disabled={!localSession || workspaceBusy}>刷新</button>
         <button onClick={newFile} disabled={workspaceBusy}>新建</button>
         {localSession && <button onClick={startDirectoryOperation} disabled={workspaceBusy}>目录</button>}
@@ -840,13 +881,22 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
         <div className="editor-content"><EditorSurface session={session} wrap={wrap} readOnly={workspaceBusy} ref={editor} onReady={() => setEditorReady(true)} />
           {!view.active && <div className="editor-empty"><Icon name="code" size={38} /><p>从左侧选择文件，继续写作。</p>{!localSession && <button onClick={newFile}>新建草稿</button>}</div>}
         </div>
-        <div className={"draft-notice " + (activeStatus === "error" ? "error" : "")} role={activeError ? "alert" : undefined}><Icon name={activeStatus === "error" ? "warning" : "info"} size={13} /><span>{activeError || (localSession ? "本地保存使用 Revision 冲突保护，不会静默覆盖外部修改。" : "草稿缓存仅用于恢复，尚未保存为本地项目文件。")}</span>
+        <div className={"draft-notice " + (activeStatus === "error" ? "error" : "")} role={activeError ? "alert" : undefined}><Icon name={activeStatus === "error" ? "warning" : "info"} size={13} /><span>{activeError || (localSession ? "本地保存使用 Revision 冲突保护，不会静默覆盖外部修改。" : "草稿可直接编译预览；只有导出项目时才选择目标目录。")}</span>
           {conflictFile && <button onClick={() => void inspectConflict()}>对比版本</button>}</div>
       </section>
       {preview && <><Splitter label="调整编辑器宽度" min={300} max={Math.max(400, window.innerWidth - 400)} value={editorWidth} onChange={setEditorWidth} />
-        <PreviewPanel build={buildView} canCompile={Boolean(view.active && nativeFiles)}
-          requiresProject={!localSession || !project} onCompile={requestCompile} onCancel={() => void cancelBuild()}
+        <PreviewPanel build={buildView} canCompile={Boolean(view.active && nativeBuild && !workspaceBusy)}
+          onCompile={requestCompile} onCancel={() => void cancelBuild()}
           onConfigure={openSettings}
+          onPreviewCommit={generation => setBuildView(current => {
+            if (current.candidate?.generation !== generation) return current;
+            const committed = current.candidate;
+            return { ...current, state: "succeeded", artifactId: committed.artifactId, pdf: committed.pdf,
+              syncTexAvailable: committed.syncTexAvailable, candidate: undefined, phase: "complete" };
+          })}
+          onPreviewReject={(generation, message) => setBuildView(current =>
+            current.candidate?.generation !== generation ? current : ({ ...current, state: "failed",
+              candidate: undefined, phase: "render", output: current.output + "\nPDF.js: " + message }))}
           target={pdfTarget} zoom={previewZoom} onZoomChange={setPreviewZoom}
           onReverse={(page, x, y) => { if (buildView.artifactId) void authoringConnection.reverse(buildView.artifactId, page, x, y)
             .then(location => openSearchHit(location.fileId, location.line))
@@ -861,23 +911,20 @@ function Workbench({ session: draftSession, status, error, save: saveDraft }: {
       <section className={"modal" + (modal === "conflict" ? " conflict-modal" : "")} role="dialog" aria-modal="true" aria-labelledby="dialog-title">
         <div className="modal-title"><h2 id="dialog-title">{modal === "settings" ? "本地设置与会话" : modal === "trash" ? "项目回收站" : modal === "directory" ? "目录管理" : modal === "manage" ? ({ create: '新建本地文件', rename: '重命名文件', remove: '删除文件' })[fileOperation] : modal === "conflict" ? "处理文件冲突" : modal === "new" ? "新建草稿文件" : "你的本地写作工作台"}</h2><Tool icon="close" label="关闭对话框" onClick={() => setModal(null)} /></div>
         {modal === "settings" ? <form onSubmit={event => { event.preventDefault(); void savePreferences(); }}>
-          <label htmlFor="tex-root">TeX 根目录（可留空使用系统或 Lite 外部工具链）</label>
-          <input id="tex-root" value={preferencesDraft.texRoot} maxLength={4096} disabled={settingsBusy}
-            onChange={event => setPreferencesDraft(current => ({ ...current, texRoot: event.target.value }))}
-            placeholder="例如 D:\\texlive\\2026" />
-          <label htmlFor="tex-engine">首选编译引擎</label>
-          <select id="tex-engine" value={preferencesDraft.engine} disabled={settingsBusy}
-            onChange={event => setPreferencesDraft(current => ({ ...current,
-              engine: event.target.value as Preferences['engine'] }))}>
-            <option value="xelatex">XeLaTeX</option><option value="pdflatex">pdfLaTeX</option>
-            <option value="lualatex">LuaLaTeX</option>
-          </select>
+          <p><b>编译工具链：</b>内置 MiKTeX Runtime（Full 版固定使用，不读取系统 TeX）。</p>
+          <p>编译引擎：pdfLaTeX（内置）。旧版引擎设置已统一迁移；不自动处理 BibTeX/Biber。</p>
           <label htmlFor="tex-timeout">编译超时（毫秒）</label>
           <input id="tex-timeout" type="number" min={1000} max={300000} value={preferencesDraft.timeoutMs}
             disabled={settingsBusy} onChange={event => setPreferencesDraft(current => ({ ...current,
               timeoutMs: Number(event.target.value) }))} />
-          <label><input type="checkbox" checked={preferencesDraft.autoCompile} disabled={settingsBusy}
-            onChange={event => setPreferencesDraft(current => ({ ...current, autoCompile: event.target.checked }))} /> 保存后自动编译</label>
+          <label htmlFor="compile-mode">编译触发方式</label>
+          <select id="compile-mode" value={preferencesDraft.compileMode} disabled={settingsBusy}
+            onChange={event => setPreferencesDraft(current => ({ ...current,
+              compileMode: event.target.value as Preferences['compileMode'] }))}>
+            <option value="live">实时预览（停止输入 900 ms）</option>
+            <option value="onSave">仅保存后编译</option>
+            <option value="manual">仅手动编译</option>
+          </select>
           <p>布局、打开标签与最近项目由本机 SQLite 保存。重新选择同一项目后恢复标签；不会把绝对 PDF 路径交给前端。</p>
           <div className="recent-workspaces"><b>最近项目</b>
             {recentWorkspaces.map(root => <code key={root}>{root}</code>)}

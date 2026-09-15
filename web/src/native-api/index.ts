@@ -2,6 +2,7 @@ import { validatePing, type PingRequest, type NativeApi } from "../../.generated
 export { createSystemConnection, SystemRpcClient, CefSystemTransport, FakeSystemTransport } from './system';
 export { WorkspaceRpcClient } from './workspace';
 export { AuthoringRpcClient } from './authoring';
+export { ExportRpcClient } from './export';
 export { PreferencesSessionRpcClient } from './preferencesSession';
 export type { Preferences, SessionSnapshot } from './preferencesSession';
 export { RpcEventCursor } from './events';

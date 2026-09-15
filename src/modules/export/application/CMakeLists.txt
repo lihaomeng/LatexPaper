@@ -1,0 +1,13 @@
+add_library(lol_export_inbound INTERFACE)
+target_include_directories(lol_export_inbound INTERFACE inbound/include)
+target_link_libraries(lol_export_inbound INTERFACE lol_kernel)
+lol_register(lol_export_inbound inbound export)
+
+add_library(lol_export_outbound INTERFACE)
+target_include_directories(lol_export_outbound INTERFACE outbound/include)
+target_link_libraries(lol_export_outbound INTERFACE lol_kernel)
+lol_register(lol_export_outbound outbound export)
+
+add_library(lol_export_app STATIC src/kexports.cpp)
+target_link_libraries(lol_export_app PRIVATE lol_export_domain lol_export_inbound lol_export_outbound)
+lol_register(lol_export_app app export)

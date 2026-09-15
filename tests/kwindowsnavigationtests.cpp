@@ -48,6 +48,17 @@ int main()
         std::get<KError>(missing).m_code == KErrorCode::Unavailable,
         "missing executable is explicit");
 
+    const fs::path miKTeXRoot = base / L"runtime" / L"miktex";
+    const fs::path miKTeXBin = miKTeXRoot / L"texmfs" / L"install" /
+        L"miktex" / L"bin" / L"x64";
+    fs::create_directories(miKTeXBin, error);
+    fs::copy_file(fs::path(LOL_FAKE_SYNCTEX_PATH), miKTeXBin / L"synctex.exe",
+        fs::copy_options::overwrite_existing, error);
+    KResult<std::shared_ptr<IKSyncTexBackend>> officialLayout = createWindowsSyncTexBackend(
+        {utf8(base / L"official-cache"), {utf8(miKTeXRoot)}, {}, false});
+    check(!error && std::holds_alternative<std::shared_ptr<IKSyncTexBackend>>(officialLayout),
+        "source-built MiKTeX SyncTeX layout works without system discovery");
+
     KResult<std::shared_ptr<IKSyncTexBackend>> made = createWindowsSyncTexBackend(
         {utf8(cache), {}, LOL_FAKE_SYNCTEX_PATH});
     check(std::holds_alternative<std::shared_ptr<IKSyncTexBackend>>(made),

@@ -30,7 +30,7 @@ struct KCompilerRun
     std::string m_jobId;
     std::string m_snapshotId;
     std::string m_mainFileId;
-    KCompilerEngine m_engine = KCompilerEngine::XeLatex;
+    KCompilerEngine m_engine = KCompilerEngine::PdfLatex;
     unsigned int m_timeoutMs = 120000;
     std::function<void(std::string_view, bool)> m_onOutput;
 };
@@ -43,6 +43,7 @@ struct KCompilerRunResult
     std::vector<KCompilerDiagnostic> m_diagnostics;
     std::vector<std::uint8_t> m_pdf;
     std::vector<std::uint8_t> m_syncTex;
+    bool m_rerunRequired = false;
 };
 class IKCompilerBackend
 {

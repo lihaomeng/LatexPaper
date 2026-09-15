@@ -20,7 +20,7 @@ runtime/miktex/texmfs/install/miktex/bin/x64/*.exe
 
 - MiKTeX 在独立目录下载、配置、编译和安装；不加入 LightOverLeaf 的默认 CMake Target 图。
 - Build Application 只依赖 `IKCompilerBackend`，不知道 MiKTeX、TeX Live、CEF 或 React。
-- Full 包可携带源码构建的 MiKTeX；Lite 包继续使用用户配置或系统 TeX。
+- 产品只发布 Full 绿色目录，并固定携带源码构建的 MiKTeX；Lite 与 Portable TeX Live 不再是发布形态。
 - 编译期间禁止 Shell Escape，直接 MiKTeX 引擎显式传入 `--disable-installer`；运行时配置同时写入 `AutoInstall=0`。
 - 宏包准备只允许在显式的 Runtime 构建阶段联网执行，应用运行时不得静默下载宏包。
 
@@ -97,7 +97,7 @@ D:/CodeMyself/QTBest/thirdparty_install/miktex/
 
 ## 5. LightOverLeaf 发现与调用
 
-桌面 Composition Root 按以下顺序注入候选根：用户设置、`LIGHTOVERLEAF_TEX_ROOT`、应用旁 `runtime/miktex`、应用旁 `texlive`、当前目录对应载荷，以及系统常见目录。Windows Adapter 对 MiKTeX 识别为 `toolchainId=miktex`，但仍通过统一 `IKCompilerBackend` 返回能力并执行，因此切换发行版不修改 Use Case、RPC 或 React。
+桌面 Composition Root 检测到应用旁 `runtime/miktex` 后进入严格模式：Build 与 SyncTeX 只注入该根，并关闭系统 PATH、用户设置和其它发行版回退。未携带 Runtime 的开发构建才允许读取 `LIGHTOVERLEAF_TEX_ROOT`、测试 Root 和系统常见目录。Windows Adapter 仍通过统一 `IKCompilerBackend` 返回能力并执行，因此此策略不会把 MiKTeX 类型带入 Use Case、RPC 或 React。
 
 开发阶段可在设置中直接指定：
 
@@ -105,19 +105,17 @@ D:/CodeMyself/QTBest/thirdparty_install/miktex/
 D:/CodeMyself/QTBest/thirdparty_install/miktex
 ```
 
-## 6. Full 单文件打包
+## 6. Full 绿色目录打包
+
+统一入口：
 
 ```powershell
-.\scripts\package-miktex.ps1 -MiKTeXRoot 'D:\CodeMyself\QTBest\thirdparty_install\miktex'
+.\scripts\package.ps1 -MiKTeXRoot 'D:\CodeMyself\QTBest\thirdparty_install\miktex'
 ```
 
-也可以使用统一入口：
+`package-full.ps1` 与 `package-miktex.ps1` 仅保留为兼容别名。打包器验证 XeLaTeX、pdfLaTeX、LuaLaTeX、SyncTeX 与来源清单，然后把 Runtime 固定复制到 `LightOverLeaf-Full-win64/runtime/miktex`。不生成 archive、自解压 EXE 或 Runtime Launcher；最终用户直接运行目录内 `LightOverLeaf.exe`。
 
-```powershell
-.\scripts\package-full.ps1 -MiKTeXRoot 'D:\CodeMyself\QTBest\thirdparty_install\miktex'
-```
-
-打包器在复制前验证 XeLaTeX、pdfLaTeX 和 SyncTeX，载荷位置固定为 `payload/runtime/miktex`。报告写入 `texRuntimeKind=MiKTeX` 与 `texRuntimeSource=source-built`。`-PortableTexRoot` 与 `-MiKTeXRoot` 必须且只能提供一个，避免两个发行版互相污染。
+报告写入 `delivery=expanded-green-directory`、`runtimeExtraction=false`、`archiveCreated=false`、`bundledArchiveTool=false`、`texRuntimeKind=MiKTeX` 与 `texRuntimeSource=source-built`。目录同时包含 `runtime-manifest.json` 和 `package-files.sha256`。
 
 ## 7. 验收标准
 
@@ -126,7 +124,7 @@ D:/CodeMyself/QTBest/thirdparty_install/miktex
 3. 三种引擎与 `synctex.exe` 可执行；Basic Fixture 能生成非空 PDF 和 `.synctex.gz`。
 4. LightOverLeaf 能报告 MiKTeX 能力，保存后编译、Artifact 发布和 PDF.js 预览成功。
 5. 缺宏包时明确失败且日志可见，不弹出安装器、不联网、不伪造 PDF。
-6. Full 单文件归档校验、GUI Subsystem 检查和 smoke 通过。
+6. Full 绿色目录清单、禁止归档/启动器检查、GUI Subsystem 检查和目录直接 smoke 通过。
 7. 在干净 Windows 环境中验证中文路径、字体、BibTeX/Biber、取消、超时和卸载/临时目录清理。
 
 ## 8. 当前执行记录
@@ -142,5 +140,4 @@ D:/CodeMyself/QTBest/thirdparty_install/miktex
 - 真实 XeLaTeX 验收已生成 `out/acceptance/miktex/main.pdf`（5172 bytes）和
   `main.synctex.gz`（520 bytes），退出码 0。`basic` 不保证任意论文宏包闭包；例如当前镜像
   的该集合缺少 `kvsetkeys`，需要常见论文宏包时发布者应使用 `-PackageSet complete`。
-- 前端 288/288、Release CTest 33/33 通过。Full 单文件 GUI EXE 已生成并完成归档测试、
-  PE GUI Subsystem 检查与直接 smoke；精确产物信息见 M8 验收记录。
+- 前端 288/288、Release CTest 33/33 通过。Full 绿色目录已生成；入口为 GUI Subsystem，目录直接 smoke 为 2028 ms，且目录内 XeLaTeX 再次生成 5172-byte PDF 与 538-byte SyncTeX。精确产物信息见 M8 验收记录。

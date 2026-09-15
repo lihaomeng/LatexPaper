@@ -3,155 +3,647 @@
   "$id": "lightoverleaf:rpc:v2:build",
   "$defs": {
     "BuildDetectRequest": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "method", "params"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "method",
+        "params"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "method": { "type": "string", "const": "build.detect" },
-        "params": { "type": "object", "additionalProperties": false, "required": [], "properties": {} }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "method": {
+          "type": "string",
+          "const": "build.detect"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {}
+        }
       }
     },
     "BuildDetectResponse": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "ok",
+        "method",
+        "result"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "ok": { "type": "boolean", "const": true },
-        "method": { "type": "string", "const": "build.detect" },
-        "result": { "type": "object", "additionalProperties": false,
-          "required": ["toolchains"], "properties": {
-            "toolchains": { "type": "array", "minItems": 0, "maxItems": 16,
-              "items": { "type": "object", "additionalProperties": false,
-                "required": ["toolchainId", "displayName", "engines"], "properties": {
-                  "toolchainId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" },
-                  "displayName": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 256 },
-                  "engines": { "type": "array", "minItems": 1, "maxItems": 3,
-                    "items": { "type": "string", "enum": ["pdflatex", "xelatex", "lualatex"] } }
-                } }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "method": {
+          "type": "string",
+          "const": "build.detect"
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "toolchains"
+          ],
+          "properties": {
+            "toolchains": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "toolchainId",
+                  "displayName",
+                  "engines"
+                ],
+                "properties": {
+                  "toolchainId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[a-zA-Z0-9.-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "x-utf8MinBytes": 1,
+                    "x-utf8MaxBytes": 256
+                  },
+                  "engines": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pdflatex"
+                      ]
+                    }
+                  }
+                }
+              }
             }
-          } }
+          }
+        }
       }
     },
     "BuildStartRequest": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "method", "params"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "method",
+        "params"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "method": { "type": "string", "const": "build.start" },
-        "params": { "type": "object", "additionalProperties": false,
-          "required": ["jobId", "snapshotId", "mainFileId", "engine", "timeoutMs"], "properties": {
-            "jobId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" },
-            "snapshotId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" },
-            "mainFileId": { "type": "string", "x-utf8MinBytes": 1, "x-utf8MaxBytes": 4096 },
-            "engine": { "type": "string", "enum": ["pdflatex", "xelatex", "lualatex"] },
-            "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 300000 }
-          } }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "method": {
+          "type": "string",
+          "const": "build.start"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "jobId",
+            "snapshotId",
+            "mainFileId",
+            "engine",
+            "timeoutMs",
+            "overlayFiles",
+            "scopeId",
+            "generation"
+          ],
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9.-]+$"
+            },
+            "snapshotId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9.-]+$"
+            },
+            "mainFileId": {
+              "type": "string",
+              "x-utf8MinBytes": 1,
+              "x-utf8MaxBytes": 4096
+            },
+            "engine": {
+              "type": "string",
+              "enum": [
+                "pdflatex"
+              ]
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 300000
+            },
+            "overlayFiles": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 32,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "fileId",
+                  "content"
+                ],
+                "properties": {
+                  "fileId": {
+                    "type": "string",
+                    "x-utf8MinBytes": 1,
+                    "x-utf8MaxBytes": 4096
+                  },
+                  "content": {
+                    "type": "string",
+                    "x-utf8MinBytes": 0,
+                    "x-utf8MaxBytes": 4194304
+                  }
+                }
+              }
+            },
+            "scopeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9.-]+$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        }
       }
     },
     "BuildStartResponse": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "ok",
+        "method",
+        "result"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "ok": { "type": "boolean", "const": true },
-        "method": { "type": "string", "const": "build.start" },
-        "result": { "type": "object", "additionalProperties": false,
-          "required": ["jobId", "terminal", "exitCode", "output", "outputTruncated", "diagnostics", "artifactId", "syncTexAvailable"], "properties": {
-            "jobId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" },
-            "terminal": { "type": "string", "enum": ["succeeded", "failed", "cancelled", "timedOut", "compilerUnavailable"] },
-            "exitCode": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
-            "output": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 1048576 },
-            "outputTruncated": { "type": "boolean" },
-            "diagnostics": { "type": "array", "minItems": 0, "maxItems": 1000,
-              "items": { "type": "object", "additionalProperties": false,
-                "required": ["severity", "fileId", "line", "message"], "properties": {
-                  "severity": { "type": "string", "enum": ["info", "warning", "error"] },
-                  "fileId": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 4096 },
-                  "line": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-                  "message": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 4096 }
-                } }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "method": {
+          "type": "string",
+          "const": "build.start"
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "jobId",
+            "terminal",
+            "exitCode",
+            "output",
+            "outputTruncated",
+            "diagnostics",
+            "artifactId",
+            "syncTexAvailable",
+            "generation",
+            "phase"
+          ],
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9.-]+$"
             },
-            "artifactId": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 96 },
-            "syncTexAvailable": { "type": "boolean" }
-          } }
+            "terminal": {
+              "type": "string",
+              "enum": [
+                "succeeded",
+                "failed",
+                "cancelled",
+                "timedOut",
+                "compilerUnavailable"
+              ]
+            },
+            "exitCode": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "output": {
+              "type": "string",
+              "x-utf8MinBytes": 0,
+              "x-utf8MaxBytes": 1048576
+            },
+            "outputTruncated": {
+              "type": "boolean"
+            },
+            "diagnostics": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 1000,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "severity",
+                  "fileId",
+                  "line",
+                  "message"
+                ],
+                "properties": {
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "info",
+                      "warning",
+                      "error"
+                    ]
+                  },
+                  "fileId": {
+                    "type": "string",
+                    "x-utf8MinBytes": 0,
+                    "x-utf8MaxBytes": 4096
+                  },
+                  "line": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "message": {
+                    "type": "string",
+                    "x-utf8MinBytes": 0,
+                    "x-utf8MaxBytes": 4096
+                  }
+                }
+              }
+            },
+            "artifactId": {
+              "type": "string",
+              "x-utf8MinBytes": 0,
+              "x-utf8MaxBytes": 96
+            },
+            "syncTexAvailable": {
+              "type": "boolean"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "phase": {
+              "type": "string",
+              "enum": [
+                "snapshot",
+                "detect",
+                "compile",
+                "artifact",
+                "render",
+                "complete"
+              ]
+            }
+          }
+        }
       }
     },
     "BuildStatusRequest": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "method", "params"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "method",
+        "params"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "method": { "type": "string", "const": "build.status" },
-        "params": { "type": "object", "additionalProperties": false,
-          "required": ["jobId"], "properties": {
-            "jobId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" }
-          } }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "method": {
+          "type": "string",
+          "const": "build.status"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "jobId"
+          ],
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9.-]+$"
+            }
+          }
+        }
       }
     },
     "BuildStatusResponse": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "ok",
+        "method",
+        "result"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "ok": { "type": "boolean", "const": true },
-        "method": { "type": "string", "const": "build.status" },
-        "result": { "type": "object", "additionalProperties": false,
-          "required": ["jobId", "state", "output", "outputTruncated"], "properties": {
-            "jobId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" },
-            "state": { "type": "string", "enum": ["running", "succeeded", "failed", "cancelled", "timedOut", "compilerUnavailable"] },
-            "output": { "type": "string", "x-utf8MinBytes": 0, "x-utf8MaxBytes": 1048576 },
-            "outputTruncated": { "type": "boolean" }
-          } }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "method": {
+          "type": "string",
+          "const": "build.status"
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "jobId",
+            "state",
+            "output",
+            "outputTruncated",
+            "generation",
+            "phase"
+          ],
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9.-]+$"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "running",
+                "succeeded",
+                "failed",
+                "cancelled",
+                "timedOut",
+                "compilerUnavailable"
+              ]
+            },
+            "output": {
+              "type": "string",
+              "x-utf8MinBytes": 0,
+              "x-utf8MaxBytes": 1048576
+            },
+            "outputTruncated": {
+              "type": "boolean"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "phase": {
+              "type": "string",
+              "enum": [
+                "snapshot",
+                "detect",
+                "compile",
+                "artifact",
+                "render",
+                "complete"
+              ]
+            }
+          }
+        }
       }
     },
     "BuildCancelRequest": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "method", "params"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "method",
+        "params"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "method": { "type": "string", "const": "build.cancel" },
-        "params": { "type": "object", "additionalProperties": false,
-          "required": ["jobId"], "properties": {
-            "jobId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9.-]+$" }
-          } }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "method": {
+          "type": "string",
+          "const": "build.cancel"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "jobId"
+          ],
+          "properties": {
+            "jobId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-zA-Z0-9.-]+$"
+            }
+          }
+        }
       }
     },
     "BuildCancelResponse": {
-      "type": "object", "additionalProperties": false,
-      "required": ["version", "id", "clientSequence", "ok", "method", "result"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "clientSequence",
+        "ok",
+        "method",
+        "result"
+      ],
       "properties": {
-        "version": { "type": "integer", "const": 2 },
-        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9-]+$" },
-        "clientSequence": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-        "ok": { "type": "boolean", "const": true },
-        "method": { "type": "string", "const": "build.cancel" },
-        "result": { "type": "object", "additionalProperties": false,
-          "required": ["accepted"], "properties": { "accepted": { "type": "boolean" } } }
+        "version": {
+          "type": "integer",
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9-]+$"
+        },
+        "clientSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "method": {
+          "type": "string",
+          "const": "build.cancel"
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "accepted"
+          ],
+          "properties": {
+            "accepted": {
+              "type": "boolean"
+            }
+          }
+        }
       }
     }
   },
   "oneOf": [
-    { "$ref": "#/$defs/BuildDetectRequest" },
-    { "$ref": "#/$defs/BuildDetectResponse" },
-    { "$ref": "#/$defs/BuildStartRequest" },
-    { "$ref": "#/$defs/BuildStartResponse" },
-    { "$ref": "#/$defs/BuildStatusRequest" },
-    { "$ref": "#/$defs/BuildStatusResponse" },
-    { "$ref": "#/$defs/BuildCancelRequest" },
-    { "$ref": "#/$defs/BuildCancelResponse" }
+    {
+      "$ref": "#/$defs/BuildDetectRequest"
+    },
+    {
+      "$ref": "#/$defs/BuildDetectResponse"
+    },
+    {
+      "$ref": "#/$defs/BuildStartRequest"
+    },
+    {
+      "$ref": "#/$defs/BuildStartResponse"
+    },
+    {
+      "$ref": "#/$defs/BuildStatusRequest"
+    },
+    {
+      "$ref": "#/$defs/BuildStatusResponse"
+    },
+    {
+      "$ref": "#/$defs/BuildCancelRequest"
+    },
+    {
+      "$ref": "#/$defs/BuildCancelResponse"
+    }
   ]
 }

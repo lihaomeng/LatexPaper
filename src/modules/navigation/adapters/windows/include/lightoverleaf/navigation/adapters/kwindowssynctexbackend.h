@@ -12,6 +12,7 @@ struct KWindowsSyncTexOptions
     std::string m_cacheRootUtf8;
     std::vector<std::string> m_texRootsUtf8;
     std::string m_executableUtf8;
+    bool m_allowSystemDiscovery = true;
 };
 
 KResult<std::shared_ptr<IKSyncTexBackend>> createWindowsSyncTexBackend(

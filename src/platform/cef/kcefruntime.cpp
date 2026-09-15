@@ -7,6 +7,12 @@
 #include <cstdio>
 #include <filesystem>
 #include <utility>
+#ifdef _MSC_VER
+// CEF default callbacks intentionally leave parameters unused.
+// Restore /W4 diagnostics for our implementation after the vendor headers.
+#pragma warning(push)
+#pragma warning(disable : 4100)
+#endif
 #include "include/cef_app.h"
 #include "include/cef_client.h"
 #include "include/cef_parser.h"
@@ -15,6 +21,9 @@
 #include "include/wrapper/cef_stream_resource_handler.h"
 #include "include/wrapper/cef_byte_read_handler.h"
 #include "include/wrapper/cef_message_router.h"
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 namespace lightoverleaf
 {

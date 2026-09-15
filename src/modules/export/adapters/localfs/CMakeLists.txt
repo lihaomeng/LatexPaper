@@ -1,0 +1,5 @@
+add_library(lol_export_adapter_localfs STATIC src/klocalexportstore.cpp)
+target_include_directories(lol_export_adapter_localfs PUBLIC include)
+target_compile_definitions(lol_export_adapter_localfs PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(lol_export_adapter_localfs PUBLIC lol_export_outbound PRIVATE lol_export_domain bcrypt)
+lol_register(lol_export_adapter_localfs adapter export)

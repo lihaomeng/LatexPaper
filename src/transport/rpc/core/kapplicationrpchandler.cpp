@@ -1,6 +1,8 @@
 #include <lightoverleaf/rpc/kapplicationrpchandler.h>
 #include <lightoverleaf/preferences/inbound/ikpreferences.h>
 #include <lightoverleaf/session/inbound/iksessions.h>
+#include <lightoverleaf/export/inbound/ikexports.h>
+#include <chrono>
 #include <lightoverleaf/workspaceworkflow/inbound/ikworkspaceworkflow.h>
 
 namespace lightoverleaf::rpc
@@ -20,7 +22,13 @@ const char* errorCode(const KError& error)
     case KErrorCode::InvalidArgument:
     case KErrorCode::InvalidEncoding: return "INVALID_ARGUMENT";
     case KErrorCode::NotFound: return "FILE_NOT_FOUND";
-    case KErrorCode::Conflict: return "FILE_CONFLICT";
+    case KErrorCode::Conflict:
+        if (error.m_messageKey == "build.staleGeneration") return "BUILD_STALE_GENERATION";
+        if (error.m_messageKey == "build.jobExists") return "BUILD_JOB_EXISTS";
+        if (error.m_messageKey == "build.snapshotExists") return "BUILD_SNAPSHOT_EXISTS";
+        if (error.m_messageKey == "build.overlayConflict") return "BUILD_OVERLAY_CONFLICT";
+        if (error.m_messageKey == "build.duplicateOverlay") return "BUILD_DUPLICATE_OVERLAY";
+        return "FILE_CONFLICT";
     case KErrorCode::Unavailable: return error.m_messageKey == "workspace.notOpen" ? "WORKSPACE_NOT_OPEN" : "FILE_OPERATION_FAILED";
     case KErrorCode::ResourceExhausted: return "RESOURCE_EXHAUSTED";
     case KErrorCode::Cancelled: return "USER_CANCELLED";
@@ -109,6 +117,20 @@ const char* buildState(build::KBuildState state)
     return "failed";
 }
 
+const char* buildPhase(build::KBuildPhase phase)
+{
+    switch (phase)
+    {
+    case build::KBuildPhase::Snapshot: return "snapshot";
+    case build::KBuildPhase::Detect: return "detect";
+    case build::KBuildPhase::Compile: return "compile";
+    case build::KBuildPhase::Artifact: return "artifact";
+    case build::KBuildPhase::Render: return "render";
+    case build::KBuildPhase::Complete: return "complete";
+    }
+    return "compile";
+}
+
 const char* diagnosticSeverity(build::KDiagnosticSeverity severity)
 {
     return severity == build::KDiagnosticSeverity::Info ? "info" :
@@ -130,12 +152,15 @@ std::string hex(std::span<const std::uint8_t> bytes)
 KApplicationRpcHandler::KApplicationRpcHandler(std::shared_ptr<const IKGetCapabilities> capabilities,
     std::shared_ptr<workspaceworkflow::IKWorkspaceWorkflow> workflow,
     std::shared_ptr<preferences::IKPreferences> preferences,
-    std::shared_ptr<session::IKSessions> sessions)
+    std::shared_ptr<session::IKSessions> sessions,
+    std::shared_ptr<exporting::IKExports> exports)
     : m_capabilities(std::move(capabilities)), m_workflow(std::move(workflow)),
-      m_preferences(std::move(preferences)), m_sessions(std::move(sessions)) {}
+      m_preferences(std::move(preferences)), m_sessions(std::move(sessions)),
+      m_exports(std::move(exports)) {}
 
 KValue KApplicationRpcHandler::dispatch(KValue request,
-    std::optional<std::string> nativeSelection, std::stop_token stop) const
+    std::optional<std::string> nativeSelection, std::stop_token stop,
+    const std::string& sessionId) const
 {
     const auto* object = std::get_if<KValue::KObject>(&request.m_value);
     if (!object || !m_capabilities || !m_workflow) return KValue{nullptr};
@@ -371,6 +396,16 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
         command.m_engine = engine == "pdflatex" ? build::KBuildEngine::PdfLatex :
             engine == "xelatex" ? build::KBuildEngine::XeLatex : build::KBuildEngine::LuaLatex;
         command.m_timeoutMs = static_cast<unsigned int>(std::get<double>(params.at("timeoutMs").m_value));
+        command.m_scopeId = std::get<std::string>(params.at("scopeId").m_value);
+        command.m_generation = static_cast<std::uint64_t>(std::get<double>(params.at("generation").m_value));
+        for (const KValue& overlayValue :
+            std::get<KValue::KArray>(params.at("overlayFiles").m_value))
+        {
+            const auto& overlay = std::get<KValue::KObject>(overlayValue.m_value);
+            command.m_overlayFiles.push_back({
+                std::get<std::string>(overlay.at("fileId").m_value),
+                std::get<std::string>(overlay.at("content").m_value)});
+        }
         KResult<build::KBuildResult> result = m_workflow->startBuild(command, stop);
         if (const KError* error = std::get_if<KError>(&result)) return failure(*object, errorCode(*error));
         build::KBuildResult value = std::get<build::KBuildResult>(std::move(result));
@@ -392,7 +427,9 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
             {"outputTruncated", KValue{value.m_outputTruncated}},
             {"diagnostics", KValue{std::move(diagnosticValues)}},
             {"artifactId", KValue{std::move(value.m_artifactId)}},
-            {"syncTexAvailable", KValue{value.m_syncTexAvailable}}}});
+            {"syncTexAvailable", KValue{value.m_syncTexAvailable}},
+            {"generation", KValue{static_cast<double>(value.m_generation)}},
+            {"phase", KValue{std::string(buildPhase(value.m_phase))}}}});
         return KValue{std::move(response)};
     }
     if (method == "build.status")
@@ -411,7 +448,9 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
             {"jobId", KValue{std::move(value.m_jobId)}},
             {"state", KValue{std::string(buildState(value.m_state))}},
             {"output", KValue{std::move(value.m_output)}},
-            {"outputTruncated", KValue{value.m_outputTruncated}}}});
+            {"outputTruncated", KValue{value.m_outputTruncated}},
+            {"generation", KValue{static_cast<double>(value.m_generation)}},
+            {"phase", KValue{std::string(buildPhase(value.m_phase))}}}});
         return KValue{std::move(response)};
     }
     if (method == "build.cancel")
@@ -476,7 +515,60 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
             {"line",KValue{static_cast<double>(value.m_line)}},{"column",KValue{static_cast<double>(value.m_column)}}}});
         return KValue{std::move(response)};
     }
-    if (method == "preferences.get" || method == "preferences.update")
+    if (method == "export.selectDestination")
+    {
+        if (!m_exports) return failure(*object, "FILE_OPERATION_FAILED");
+        if (!v2::validateExportSelectDestinationRequest(request))
+            return failure(*object, "INVALID_ARGUMENT");
+        if (!nativeSelection) return failure(*object, "USER_CANCELLED");
+        const auto now = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        KResult<exporting::KExportDestination> result = m_exports->authorize(sessionId, *nativeSelection, now);
+        if (const KError* error = std::get_if<KError>(&result)) return failure(*object, errorCode(*error));
+        exporting::KExportDestination value = std::get<exporting::KExportDestination>(std::move(result));
+        KValue::KObject response = responseBase(*object);
+        response.emplace("ok", KValue{true}); response.emplace("method", KValue{method});
+        response.emplace("result", KValue{KValue::KObject{
+            {"destinationToken", KValue{std::move(value.m_token)}},
+            {"displayName", KValue{std::move(value.m_displayName)}},
+            {"expiresAtUnixMs", KValue{static_cast<double>(value.m_expiresAtUnixMs)}}}});
+        return KValue{std::move(response)};
+    }
+    if (method == "export.project")
+    {
+        if (!m_exports) return failure(*object, "FILE_OPERATION_FAILED");
+        if (!v2::validateExportProjectRequest(request)) return failure(*object, "INVALID_ARGUMENT");
+        const auto& params = std::get<KValue::KObject>(object->at("params").m_value);
+        exporting::KExportCommand command;
+        command.m_sessionId = sessionId;
+        command.m_destinationToken = std::get<std::string>(params.at("destinationToken").m_value);
+        command.m_generation = static_cast<std::uint64_t>(std::get<double>(params.at("generation").m_value));
+        for (const KValue& item : std::get<KValue::KArray>(params.at("files").m_value))
+        {
+            const auto& file = std::get<KValue::KObject>(item.m_value);
+            command.m_files.push_back({std::get<std::string>(file.at("fileId").m_value),
+                std::get<std::string>(file.at("content").m_value)});
+        }
+        const auto now = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        KResult<exporting::KExportResult> result = m_exports->exportProject(command, now, stop);
+        if (const KError* error = std::get_if<KError>(&result)) return failure(*object, errorCode(*error));
+        exporting::KExportResult value = std::get<exporting::KExportResult>(std::move(result));
+        KValue::KArray writtenFiles;
+        for (std::string& file : value.m_writtenFiles) writtenFiles.emplace_back(std::move(file));
+        KValue::KArray failures;
+        for (exporting::KExportFailure& item : value.m_failures)
+            failures.emplace_back(KValue::KObject{{"fileId", KValue{std::move(item.m_fileId)}},
+                {"code", KValue{std::move(item.m_code)}}});
+        KValue::KObject response = responseBase(*object);
+        response.emplace("ok", KValue{true}); response.emplace("method", KValue{method});
+        response.emplace("result", KValue{KValue::KObject{
+            {"generation", KValue{static_cast<double>(value.m_generation)}},
+            {"complete", KValue{value.m_complete}},
+            {"writtenFiles", KValue{std::move(writtenFiles)}},
+            {"failures", KValue{std::move(failures)}}}});
+        return KValue{std::move(response)};
+    }    if (method == "preferences.get" || method == "preferences.update")
     {
         if (!m_preferences) return failure(*object, "FILE_OPERATION_FAILED");
         preferences::KPreferences value;
@@ -499,7 +591,7 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
             update.m_engine = std::get<std::string>(params.at("engine").m_value);
             update.m_timeoutMs = static_cast<unsigned int>(
                 std::get<double>(params.at("timeoutMs").m_value));
-            update.m_autoCompile = std::get<bool>(params.at("autoCompile").m_value);
+            update.m_compileMode = std::get<std::string>(params.at("compileMode").m_value);
             KResult<preferences::KPreferences> result = m_preferences->update(update);
             if (const KError* error = std::get_if<KError>(&result))
                 return failure(*object, errorCode(*error));
@@ -512,7 +604,7 @@ KValue KApplicationRpcHandler::dispatch(KValue request,
             {"texRoot", KValue{std::move(value.m_texRoot)}},
             {"engine", KValue{std::move(value.m_engine)}},
             {"timeoutMs", KValue{static_cast<double>(value.m_timeoutMs)}},
-            {"autoCompile", KValue{value.m_autoCompile}}}});
+            {"compileMode", KValue{std::move(value.m_compileMode)}}}});
         return KValue{std::move(response)};
     }
     if (method == "session.restore")

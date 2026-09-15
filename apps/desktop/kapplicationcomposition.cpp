@@ -24,6 +24,8 @@
 #include <lightoverleaf/preferences/inbound/ikpreferences.h>
 #include <lightoverleaf/session/adapters/ksqlitesessionstore.h>
 #include <lightoverleaf/session/inbound/iksessions.h>
+#include <lightoverleaf/export/adapters/klocalexportstore.h>
+#include <lightoverleaf/export/inbound/ikexports.h>
 #include <windows.h>
 #include <atomic>
 #include <chrono>
@@ -85,6 +87,33 @@ public:
 private: std::shared_ptr<preview::IKPreviewArtifacts> m_previews;
 };
 
+class KSessionExportEndpoint final : public IKNativeMessageEndpoint
+{
+public:
+    KSessionExportEndpoint(std::shared_ptr<IKNativeMessageEndpoint> inner,
+        std::shared_ptr<exporting::IKExports> exports, std::string sessionId)
+        : m_inner(std::move(inner)), m_exports(std::move(exports)), m_sessionId(std::move(sessionId)) {}
+    ~KSessionExportEndpoint() override { close(); }
+    void request(std::int64_t queryId, const std::string& message, bool persistent,
+        KNativeReplyCallback reply) override
+    {
+        if (m_inner) m_inner->request(queryId, message, persistent, std::move(reply));
+        else if (reply) reply({false, "TRANSPORT_UNAVAILABLE"});
+    }
+    void cancel(std::int64_t queryId) override { if (m_inner) m_inner->cancel(queryId); }
+    void close() override
+    {
+        if (m_closed.exchange(true)) return;
+        if (m_inner) m_inner->close();
+        if (m_exports) m_exports->revokeSession(m_sessionId);
+        m_inner.reset(); m_exports.reset();
+    }
+private:
+    std::shared_ptr<IKNativeMessageEndpoint> m_inner;
+    std::shared_ptr<exporting::IKExports> m_exports;
+    std::string m_sessionId;
+    std::atomic_bool m_closed = false;
+};
 struct KCombinedStop
 {
 public:
@@ -130,19 +159,23 @@ std::filesystem::path moduleDirectory()
 class KApplicationComposition::KImpl final : public std::enable_shared_from_this<KImpl>
 {
 public:
-    KImpl(KWorkspacePicker picker, std::shared_ptr<const IKGetCapabilities> capabilities,
+    KImpl(KWorkspacePicker workspacePicker, KWorkspacePicker exportPicker,
+        std::shared_ptr<const IKGetCapabilities> capabilities,
         std::shared_ptr<workspaceworkflow::IKWorkspaceWorkflow> workflow,
         std::shared_ptr<rpc::KApplicationRpcHandler> handler,
+        std::shared_ptr<exporting::IKExports> exports,
         std::unique_ptr<IKWorkerExecutor> worker)
-        : m_picker(std::move(picker)), m_capabilities(std::move(capabilities)),
-          m_workflow(std::move(workflow)), m_handler(std::move(handler)), m_worker(std::move(worker)) {}
+        : m_workspacePicker(std::move(workspacePicker)), m_exportPicker(std::move(exportPicker)),
+          m_capabilities(std::move(capabilities)),
+          m_workflow(std::move(workflow)), m_handler(std::move(handler)),
+          m_exports(std::move(exports)), m_worker(std::move(worker)) {}
     ~KImpl() { close(); }
     std::shared_ptr<IKNativeMessageEndpoint> createEndpoint(KNativeSchedule schedule,
         const std::string& sessionId)
     {
         if (m_closed || !schedule || !m_worker) return nullptr;
         const std::shared_ptr<KImpl> self = shared_from_this();
-        rpc::KEndpointDispatch dispatch = [self, schedule](rpc::KValue request,
+        rpc::KEndpointDispatch dispatch = [self, schedule, sessionId](rpc::KValue request,
             std::stop_token endpointStop, rpc::KEndpointCompletion completion) mutable
         {
             if (self->m_closed)
@@ -158,11 +191,12 @@ public:
                 if (method != object->end())
                 {
                     const std::string* name = std::get_if<std::string>(&method->second.m_value);
-                    if (name && *name == "workspace.open")
+                    if (name && (*name == "workspace.open" || *name == "export.selectDestination"))
                     {
                         try
                         {
-                            selection = self->m_picker();
+                            selection = *name == "workspace.open" ? self->m_workspacePicker() :
+                                self->m_exportPicker();
                         }
                         catch (...)
                         {
@@ -178,7 +212,7 @@ public:
             const auto sharedCompletion =
                 std::make_shared<rpc::KEndpointCompletion>(std::move(completion));
             const auto task = self->m_worker->submit(
-                [self, schedule, request = std::move(request), selection = std::move(selection),
+                [self, schedule, sessionId, request = std::move(request), selection = std::move(selection),
                  sharedCompletion, combined,
                  internal = std::move(internal)](std::stop_token workerStop) mutable
                 {
@@ -188,7 +222,7 @@ public:
                     try
                     {
                         response = self->m_handler->dispatch(std::move(request),
-                            std::move(selection), combined->m_source.get_token());
+                            std::move(selection), combined->m_source.get_token(), sessionId);
                     }
                     catch (...)
                     {
@@ -214,7 +248,9 @@ public:
                 return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
             }, m_capabilities);
-        return createNativeEndpoint(endpoint);
+        auto native = createNativeEndpoint(endpoint);
+        return native ? std::make_shared<KSessionExportEndpoint>(std::move(native), m_exports, sessionId) :
+            std::shared_ptr<IKNativeMessageEndpoint>{};
     }
     void close() noexcept
     {
@@ -222,15 +258,18 @@ public:
         if (m_worker) m_worker->close();
         m_worker.reset();
         m_handler.reset();
+        m_exports.reset();
         m_workflow.reset();
         m_capabilities.reset();
     }
 
 private:
-    KWorkspacePicker m_picker;
+    KWorkspacePicker m_workspacePicker;
+    KWorkspacePicker m_exportPicker;
     std::shared_ptr<const IKGetCapabilities> m_capabilities;
     std::shared_ptr<workspaceworkflow::IKWorkspaceWorkflow> m_workflow;
     std::shared_ptr<rpc::KApplicationRpcHandler> m_handler;
+    std::shared_ptr<exporting::IKExports> m_exports;
     std::unique_ptr<IKWorkerExecutor> m_worker;
     std::atomic_bool m_closed = false;
 };
@@ -254,9 +293,11 @@ void KApplicationComposition::close() noexcept
     if (m_impl) m_impl->close();
 }
 
-std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspacePicker picker)
+std::unique_ptr<KApplicationComposition> createApplicationComposition(
+    KWorkspacePicker workspacePicker, KWorkspacePicker exportPicker)
 {
-    if (!picker) return nullptr;
+    if (!workspacePicker) return nullptr;
+    if (!exportPicker) exportPicker = workspacePicker;
     const std::shared_ptr<workspace::IKWorkspaceStore> workspaceStore =
         workspace::createLocalWorkspaceStore();
     std::unique_ptr<workspace::IKWorkspaces> workspaces = workspace::createWorkspaces(workspaceStore);
@@ -300,8 +341,13 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspace
     std::shared_ptr<session::IKSessions> sessionsService =
         session::createSessions(std::get<std::shared_ptr<session::IKSessionStore>>(
             std::move(sessionStore)));
-    const std::shared_ptr<const build::IKCompilerRootSource> compilerRootSource =
-        std::make_shared<KPreferencesCompilerRootSource>(preferencesService);
+    const std::filesystem::path bundledMiKTeXRoot =
+        moduleDirectory() / L"runtime" / L"miktex";
+    std::error_code bundledMiKTeXError;
+    const bool hasBundledMiKTeX = std::filesystem::is_directory(
+        bundledMiKTeXRoot, bundledMiKTeXError) && !bundledMiKTeXError;
+    const std::shared_ptr<const build::IKCompilerRootSource> compilerRootSource = hasBundledMiKTeX ?
+        nullptr : std::make_shared<KPreferencesCompilerRootSource>(preferencesService);
     KResult<std::shared_ptr<preview::IKArtifactStore>> artifactStore =
         preview::createLocalArtifactStore(utf8((applicationCache / L"artifacts").wstring()));
     if (const KError* error = std::get_if<KError>(&artifactStore)) return nullptr;
@@ -310,22 +356,28 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspace
     auto publisher = std::make_shared<KBuildArtifactPublisherBridge>(previews);
     auto syncSource = std::make_shared<KSyncTexDataSourceBridge>(previews);
     std::vector<std::string> navigationTexRoots;
-    const std::wstring configuredTexRoot = environment(L"LIGHTOVERLEAF_TEX_ROOT");
-    if (!configuredTexRoot.empty()) navigationTexRoots.push_back(utf8(configuredTexRoot));
-    if (preferencesService)
+    if (hasBundledMiKTeX)
     {
-        KResult<preferences::KPreferences> configuredPreferences = preferencesService->get();
-        if (const auto* value = std::get_if<preferences::KPreferences>(&configuredPreferences);
-            value && !value->m_texRoot.empty()) navigationTexRoots.push_back(value->m_texRoot);
+        navigationTexRoots.push_back(utf8(bundledMiKTeXRoot.wstring()));
     }
-    navigationTexRoots.push_back(utf8((moduleDirectory() / L"texlive").wstring()));
-    navigationTexRoots.push_back(utf8((std::filesystem::current_path() / L"texlive").wstring()));
-    navigationTexRoots.push_back(utf8((moduleDirectory() / L"runtime" / L"miktex").wstring()));
-    navigationTexRoots.push_back(utf8((std::filesystem::current_path() / L"runtime" / L"miktex").wstring()));
+    else
+    {
+        const std::wstring configuredTexRoot = environment(L"LIGHTOVERLEAF_TEX_ROOT");
+        if (!configuredTexRoot.empty()) navigationTexRoots.push_back(utf8(configuredTexRoot));
+        if (preferencesService)
+        {
+            KResult<preferences::KPreferences> configuredPreferences = preferencesService->get();
+            if (const auto* value = std::get_if<preferences::KPreferences>(&configuredPreferences);
+                value && !value->m_texRoot.empty()) navigationTexRoots.push_back(value->m_texRoot);
+        }
+        navigationTexRoots.push_back(utf8((moduleDirectory() / L"texlive").wstring()));
+        navigationTexRoots.push_back(utf8((std::filesystem::current_path() / L"texlive").wstring()));
+        navigationTexRoots.push_back(utf8((std::filesystem::current_path() / L"runtime" / L"miktex").wstring()));
+    }
     KResult<std::shared_ptr<navigation::IKSyncTexBackend>> windowsNavigation =
         navigation::createWindowsSyncTexBackend({
             utf8((applicationCache / L"navigation").wstring()),
-            std::move(navigationTexRoots), {}});
+            std::move(navigationTexRoots), {}, !hasBundledMiKTeX});
     const bool syncTexAvailable =
         std::holds_alternative<std::shared_ptr<navigation::IKSyncTexBackend>>(windowsNavigation);
     std::shared_ptr<navigation::IKSyncTexBackend> navigationBackend = syncTexAvailable ?
@@ -333,19 +385,26 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspace
         navigation::createUnavailableSyncTexBackend();
     std::shared_ptr<navigation::IKNavigation> navigationService = navigation::createNavigation(
         std::move(syncSource), std::move(navigationBackend));
-    workspaceworkflow::KBuildFactory buildFactory = [publisher, applicationCache, compilerRootSource](const std::string& root)
+    workspaceworkflow::KBuildFactory buildFactory = [publisher, applicationCache, compilerRootSource,
+        bundledMiKTeXRoot, hasBundledMiKTeX](const std::string& root)
         -> KResult<std::shared_ptr<build::IKBuilds>>
     {
         std::filesystem::path cacheBase = applicationCache / L"build";
         std::vector<std::string> texRoots;
-        const std::wstring configured = environment(L"LIGHTOVERLEAF_TEX_ROOT");
-        if (!configured.empty()) texRoots.push_back(utf8(configured));
-        texRoots.push_back(utf8((moduleDirectory() / L"texlive").wstring()));
-        texRoots.push_back(utf8((std::filesystem::current_path() / L"texlive").wstring()));
-        texRoots.push_back(utf8((moduleDirectory() / L"runtime" / L"miktex").wstring()));
-        texRoots.push_back(utf8((std::filesystem::current_path() / L"runtime" / L"miktex").wstring()));
+        if (hasBundledMiKTeX)
+        {
+            texRoots.push_back(utf8(bundledMiKTeXRoot.wstring()));
+        }
+        else
+        {
+            const std::wstring configured = environment(L"LIGHTOVERLEAF_TEX_ROOT");
+            if (!configured.empty()) texRoots.push_back(utf8(configured));
+            texRoots.push_back(utf8((moduleDirectory() / L"texlive").wstring()));
+            texRoots.push_back(utf8((std::filesystem::current_path() / L"texlive").wstring()));
+            texRoots.push_back(utf8((std::filesystem::current_path() / L"runtime" / L"miktex").wstring()));
+        }
         KResult<build::KWindowsBuildAdapters> adapters = build::createWindowsBuildAdapters(
-            {root, utf8(cacheBase.wstring()), std::move(texRoots), compilerRootSource});
+            {root, utf8(cacheBase.wstring()), std::move(texRoots), compilerRootSource, !hasBundledMiKTeX});
         if (const KError* error = std::get_if<KError>(&adapters)) return *error;
         build::KWindowsBuildAdapters value =
             std::get<build::KWindowsBuildAdapters>(std::move(adapters));
@@ -362,10 +421,14 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspace
         createCapabilities({true, true, true, syncTexAvailable});
     if (!workspaceStore || !workflow || !worker || !capabilities) return nullptr;
     auto sharedWorkflow = std::shared_ptr<workspaceworkflow::IKWorkspaceWorkflow>(std::move(workflow));
+    std::shared_ptr<exporting::IKExports> exportsService =
+        exporting::createExports(exporting::createLocalExportStore());
+    if (!exportsService) return nullptr;
     auto handler = std::make_shared<rpc::KApplicationRpcHandler>(capabilities, sharedWorkflow,
-        preferencesService, sessionsService);
-    auto impl = std::make_shared<KApplicationComposition::KImpl>(std::move(picker), capabilities,
-        std::move(sharedWorkflow), std::move(handler), std::move(worker));
+        preferencesService, sessionsService, exportsService);
+    auto impl = std::make_shared<KApplicationComposition::KImpl>(std::move(workspacePicker),
+        std::move(exportPicker), capabilities,
+        std::move(sharedWorkflow), std::move(handler), std::move(exportsService), std::move(worker));
     return std::make_unique<KApplicationComposition>(std::move(impl));
 }
 }

@@ -1,16 +1,16 @@
-LightOverLeaf 0.1.0 development package / Windows x64
+LightOverLeaf Full green-directory distribution / Windows 10/11 x64
 
-Extract the full LightOverLeaf directory, then run LightOverLeaf.exe inside.
-Keep all DLLs, platforms, locales, licenses and web resources beside the EXE.
-This unsigned self-extracting archive is not an installer with an uninstaller.
+Run LightOverLeaf.exe directly from this directory.
+Keep all sibling DLLs, platforms, locales, web resources and runtime/miktex in place.
 
-Current scope: local project editing, native TeX compilation and PDF preview.
-Lite packages use a system or explicitly configured TeX root.
-Full packages include either a validated TeX Live or source-built MiKTeX runtime.
-The first start of a Full single-file package extracts its runtime and can take several minutes on a slower disk.
-The application never downloads missing TeX packages while compiling.
-Cache remains in Windows application data; this is not a portable user profile.
+This is the only supported edition. It includes the source-built MiKTeX runtime,
+does not use a system TeX installation, and never extracts an application payload
+when it starts. It does not invoke 7-Zip, tar, CMD or PowerShell at runtime.
 
-Third-party notices are in licenses/. Qt remains dynamically replaceable.
-Visual C++ release runtime DLLs come from the local Visual Studio redist.
-Test on a clean supported Windows machine before external release.
+Normal application data, MiKTeX caches, logs, build snapshots, PDF files and
+SyncTeX files are still written to application-data or project build locations.
+These files are runtime state, not extracted application files.
+
+Missing TeX packages are not downloaded silently while compiling. Third-party
+notices are in licenses/. Test this unsigned development distribution on a clean,
+offline supported Windows machine before external release.

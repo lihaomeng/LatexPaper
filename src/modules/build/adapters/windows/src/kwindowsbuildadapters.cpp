@@ -118,7 +118,7 @@ std::wstring quote(const std::wstring& value)
     return result;
 }
 std::optional<fs::path> findNamedExecutable(const std::vector<fs::path>& roots,
-    const std::wstring& name)
+    const std::wstring& name, bool allowSystemDiscovery)
 {
     const auto findInRoot = [&name](const fs::path& root) -> std::optional<fs::path>
     {
@@ -143,6 +143,7 @@ std::optional<fs::path> findNamedExecutable(const std::vector<fs::path>& roots,
             if (const std::optional<fs::path> found = findInRoot(iterator->path())) return found;
         }
     }
+    if (!allowSystemDiscovery) return std::nullopt;
     const DWORD required = SearchPathW(nullptr, name.c_str(), nullptr, 0, nullptr, nullptr);
     if (required == 0) return std::nullopt;
     std::wstring buffer(static_cast<std::size_t>(required) + 1, L'\0');
@@ -153,9 +154,9 @@ std::optional<fs::path> findNamedExecutable(const std::vector<fs::path>& roots,
     return fs::path(buffer);
 }
 std::optional<fs::path> findExecutable(const std::vector<fs::path>& roots,
-    KCompilerEngine engine)
+    KCompilerEngine engine, bool allowSystemDiscovery)
 {
-    return findNamedExecutable(roots, engineName(engine));
+    return findNamedExecutable(roots, engineName(engine), allowSystemDiscovery);
 }
 bool isMiKTeXExecutable(const fs::path& executable)
 {
@@ -248,59 +249,163 @@ std::vector<KCompilerDiagnostic> diagnostics(const std::string& output,
 class KLocalBuildSnapshotStore final : public IKBuildSnapshotStore
 {
 public:
-    KLocalBuildSnapshotStore(fs::path workspace, fs::path cache)
+    KLocalBuildSnapshotStore(std::optional<fs::path> workspace, fs::path cache)
         : m_workspace(std::move(workspace)), m_cache(std::move(cache)) {}
-    KResult<bool> prepare(const std::string& snapshotId, std::stop_token stop) override
+    KResult<bool> prepare(const std::string& snapshotId,
+        const std::vector<KBuildSnapshotOverlayFile>& overlayFiles,
+        std::stop_token stop) override
     {
-        if (!validBuildToken(snapshotId)) return KError{KErrorCode::InvalidArgument, "build.invalidSnapshot", false};
+        if (!validBuildToken(snapshotId))
+            return KError{KErrorCode::InvalidArgument, "build.invalidSnapshot", false};
+        fs::path partial;
         try
         {
             const fs::path final = m_cache / fromUtf8(snapshotId);
-            const fs::path partial = m_cache / fromUtf8(snapshotId + ".partial");
+            partial = m_cache / fromUtf8(snapshotId + ".partial");
             std::error_code error;
             if (fs::exists(final, error) || fs::exists(partial, error))
                 return KError{KErrorCode::Conflict, "build.snapshotExists", false};
             fs::create_directory(partial, error);
             if (error) return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
             std::uintmax_t total = 0;
-            for (fs::recursive_directory_iterator iterator(m_workspace,
-                fs::directory_options::skip_permission_denied, error), end; iterator != end; iterator.increment(error))
+            if (m_workspace)
             {
-                if (stop.stop_requested()) { fs::remove_all(partial, error); return KError{KErrorCode::Cancelled, "build.cancelled", true}; }
-                if (error) { fs::remove_all(partial, error); return KError{KErrorCode::Unavailable, "build.snapshotFailure", true}; }
-                const fs::file_status status = iterator->symlink_status(error);
-                const DWORD attributes = error ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(iterator->path().c_str());
-                if (error || fs::is_symlink(status) || (attributes != INVALID_FILE_ATTRIBUTES &&
-                    (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0))
+                for (fs::recursive_directory_iterator iterator(*m_workspace,
+                    fs::directory_options::skip_permission_denied, error), end;
+                    iterator != end; iterator.increment(error))
                 {
-                    if (!error && attributes != INVALID_FILE_ATTRIBUTES &&
-                        (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) iterator.disable_recursion_pending();
-                    error.clear(); continue;
+                    if (stop.stop_requested())
+                    {
+                        fs::remove_all(partial, error);
+                        return KError{KErrorCode::Cancelled, "build.cancelled", true};
+                    }
+                    if (error)
+                    {
+                        fs::remove_all(partial, error);
+                        return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+                    }
+                    const fs::file_status status = iterator->symlink_status(error);
+                    const DWORD attributes = error ? INVALID_FILE_ATTRIBUTES :
+                        GetFileAttributesW(iterator->path().c_str());
+                    if (error || fs::is_symlink(status) || (attributes != INVALID_FILE_ATTRIBUTES &&
+                        (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0))
+                    {
+                        if (!error && attributes != INVALID_FILE_ATTRIBUTES &&
+                            (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+                            iterator.disable_recursion_pending();
+                        error.clear();
+                        continue;
+                    }
+                    const fs::path relative = fs::relative(iterator->path(), *m_workspace, error);
+                    if (error)
+                    {
+                        fs::remove_all(partial, error);
+                        return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+                    }
+                    if (!relative.empty() && *relative.begin() == L".lightoverleaf-trash")
+                    {
+                        if (iterator->is_directory(error)) iterator.disable_recursion_pending();
+                        continue;
+                    }
+                    const fs::path destination = partial / relative;
+                    if (iterator->is_directory(error)) fs::create_directory(destination, error);
+                    else if (iterator->is_regular_file(error))
+                    {
+                        const std::uintmax_t size = iterator->file_size(error);
+                        if (error || size > kMaxBuildSnapshotBytes - total)
+                        {
+                            fs::remove_all(partial, error);
+                            return KError{KErrorCode::ResourceExhausted,
+                                "build.snapshotTooLarge", false};
+                        }
+                        total += size;
+                        fs::copy_file(iterator->path(), destination, fs::copy_options::none, error);
+                    }
+                    if (error)
+                    {
+                        fs::remove_all(partial, error);
+                        return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+                    }
                 }
-                const fs::path relative = fs::relative(iterator->path(), m_workspace, error);
-                if (error) { fs::remove_all(partial, error); return KError{KErrorCode::Unavailable, "build.snapshotFailure", true}; }
-                if (!relative.empty() && *relative.begin() == L".lightoverleaf-trash")
+            }
+            for (const KBuildSnapshotOverlayFile& file : overlayFiles)
+            {
+                if (stop.stop_requested())
                 {
-                    if (iterator->is_directory(error)) iterator.disable_recursion_pending();
-                    continue;
+                    fs::remove_all(partial, error);
+                    return KError{KErrorCode::Cancelled, "build.cancelled", true};
                 }
-                const fs::path destination = partial / relative;
-                if (iterator->is_directory(error)) fs::create_directory(destination, error);
-                else if (iterator->is_regular_file(error))
+                if (!validBuildFileId(file.m_fileId) || file.m_content.size() > kMaxBuildOverlayFileBytes)
                 {
-                    const auto size = iterator->file_size(error);
-                    if (error || size > kMaxBuildSnapshotBytes - total)
-                    { fs::remove_all(partial, error); return KError{KErrorCode::ResourceExhausted, "build.snapshotTooLarge", false}; }
-                    total += size;
-                    fs::copy_file(iterator->path(), destination, fs::copy_options::none, error);
+                    fs::remove_all(partial, error);
+                    return KError{KErrorCode::InvalidArgument, "build.invalidOverlay", false};
                 }
-                if (error) { fs::remove_all(partial, error); return KError{KErrorCode::Unavailable, "build.snapshotFailure", true}; }
+                const fs::path destination = (partial / fromUtf8(file.m_fileId)).lexically_normal();
+                if (!belowOrEqual(partial, destination) || destination == partial)
+                {
+                    fs::remove_all(partial, error);
+                    return KError{KErrorCode::InvalidArgument, "build.invalidOverlay", false};
+                }
+                std::uintmax_t replacedBytes = 0;
+                if (fs::exists(destination, error))
+                {
+                    if (error || !fs::is_regular_file(destination, error))
+                    {
+                        fs::remove_all(partial, error);
+                        return KError{KErrorCode::Conflict, "build.overlayConflict", false};
+                    }
+                    replacedBytes = fs::file_size(destination, error);
+                    if (error || replacedBytes > total)
+                    {
+                        fs::remove_all(partial, error);
+                        return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+                    }
+                }
+                const std::uintmax_t retainedBytes = total - replacedBytes;
+                if (file.m_content.size() > kMaxBuildSnapshotBytes - retainedBytes)
+                {
+                    fs::remove_all(partial, error);
+                    return KError{KErrorCode::ResourceExhausted, "build.snapshotTooLarge", false};
+                }
+                fs::create_directories(destination.parent_path(), error);
+                if (error)
+                {
+                    fs::remove_all(partial, error);
+                    return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+                }
+                std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+                if (!output)
+                {
+                    fs::remove_all(partial, error);
+                    return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+                }
+                output.write(file.m_content.data(), static_cast<std::streamsize>(file.m_content.size()));
+                output.flush();
+                if (!output)
+                {
+                    output.close();
+                    fs::remove_all(partial, error);
+                    return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+                }
+                total = retainedBytes + file.m_content.size();
             }
             fs::rename(partial, final, error);
-            if (error) { fs::remove_all(partial, error); return KError{KErrorCode::Unavailable, "build.snapshotFailure", true}; }
+            if (error)
+            {
+                fs::remove_all(partial, error);
+                return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+            }
             return true;
         }
-        catch (...) { return KError{KErrorCode::Unavailable, "build.snapshotFailure", true}; }
+        catch (...)
+        {
+            if (!partial.empty())
+            {
+                std::error_code cleanupError;
+                fs::remove_all(partial, cleanupError);
+            }
+            return KError{KErrorCode::Unavailable, "build.snapshotFailure", true};
+        }
     }
     void release(const std::string& snapshotId) noexcept override
     {
@@ -310,46 +415,50 @@ public:
             const fs::path target = m_cache / fromUtf8(snapshotId);
             std::error_code error;
             const fs::path normalized = fs::weakly_canonical(target, error);
-            if (!error && belowOrEqual(m_cache, normalized) && normalized != m_cache) fs::remove_all(normalized, error);
+            if (!error && belowOrEqual(m_cache, normalized) && normalized != m_cache)
+                fs::remove_all(normalized, error);
         }
-        catch (...) {}
+        catch (...)
+        {
+        }
     }
+
 private:
-    fs::path m_workspace;
+    std::optional<fs::path> m_workspace;
     fs::path m_cache;
 };
-
 class KWindowsCompilerBackend final : public IKCompilerBackend
 {
 public:
     KWindowsCompilerBackend(fs::path cache, std::vector<fs::path> roots,
-        std::shared_ptr<const IKCompilerRootSource> rootSource)
-        : m_cache(std::move(cache)), m_roots(std::move(roots)), m_rootSource(std::move(rootSource)) {}
+        std::shared_ptr<const IKCompilerRootSource> rootSource, bool allowSystemDiscovery)
+        : m_cache(std::move(cache)), m_roots(std::move(roots)), m_rootSource(std::move(rootSource)),
+          m_allowSystemDiscovery(allowSystemDiscovery) {}
     KResult<std::vector<KDetectedCompiler>> detect(std::stop_token stop) override
     {
         if (stop.stop_requested()) return KError{KErrorCode::Cancelled, "build.cancelled", true};
         const std::vector<fs::path> roots = compilerRoots();
         std::vector<KCompilerEngine> engines;
         bool miktex = false;
-        for (const KCompilerEngine engine : {KCompilerEngine::PdfLatex, KCompilerEngine::XeLatex, KCompilerEngine::LuaLatex})
+        for (const KCompilerEngine engine : {KCompilerEngine::PdfLatex})
         {
-            if (const std::optional<fs::path> executable = findExecutable(roots, engine))
+            if (const std::optional<fs::path> executable = findExecutable(roots, engine, m_allowSystemDiscovery))
             {
                 engines.push_back(engine);
                 miktex = miktex || isMiKTeXExecutable(*executable);
             }
         }
         if (engines.empty()) return std::vector<KDetectedCompiler>{};
-        const bool latexmk = findNamedExecutable(roots, L"latexmk.exe").has_value();
         const std::string toolchainId = miktex ? "miktex" : "windows-tex";
-        const std::string displayName = miktex ? (latexmk ? "MiKTeX (latexmk)" : "MiKTeX") :
-            (latexmk ? "Windows TeX (latexmk)" : "Windows TeX");
+        const std::string displayName = miktex ? "MiKTeX pdfLaTeX" : "pdfLaTeX";
         return std::vector<KDetectedCompiler>{{toolchainId, displayName, std::move(engines)}};
     }
     KResult<KCompilerRunResult> run(const KCompilerRun& command, std::stop_token stop) override
     {
+        if (command.m_engine != KCompilerEngine::PdfLatex)
+            return KError{KErrorCode::InvalidArgument, "build.unsupportedEngine", false};
         const std::vector<fs::path> roots = compilerRoots();
-        const std::optional<fs::path> executable = findExecutable(roots, command.m_engine);
+        const std::optional<fs::path> executable = findExecutable(roots, command.m_engine, m_allowSystemDiscovery);
         if (!executable) return KCompilerRunResult{KCompilerTerminal::CompilerUnavailable, -1,
             "compiler not found", false, {}};
         const fs::path working = m_cache / fromUtf8(command.m_snapshotId);
@@ -357,6 +466,21 @@ public:
         const fs::path mainPath = fs::weakly_canonical(working / fromUtf8(command.m_mainFileId), pathError);
         if (pathError || !belowOrEqual(working, mainPath) || !fs::is_regular_file(mainPath, pathError))
             return KError{KErrorCode::NotFound, "build.mainFileNotFound", false};
+        const fs::path stem = mainPath.parent_path() / mainPath.stem();
+        const auto auxiliaryState = [&stem]()
+        {
+            std::vector<std::vector<std::uint8_t>> state;
+            for (const wchar_t* extension : {L".aux", L".toc", L".out"})
+            {
+                auto contents = readBoundedFile(stem.wstring() + extension, kMaxBuildLogBytes);
+                if (const auto* bytes = std::get_if<std::vector<std::uint8_t>>(&contents))
+                    state.push_back(*bytes);
+                else
+                    state.emplace_back();
+            }
+            return state;
+        };
+        const auto previousAuxiliary = auxiliaryState();
         SECURITY_ATTRIBUTES attributes{sizeof(attributes), nullptr, TRUE};
         HANDLE readRaw = nullptr, writeRaw = nullptr;
         if (!CreatePipe(&readRaw, &writeRaw, &attributes, 0))
@@ -369,23 +493,12 @@ public:
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         if (!SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits)))
             return KError{KErrorCode::Unavailable, "build.processFailure", true};
-        const std::optional<fs::path> latexmk = findNamedExecutable(roots, L"latexmk.exe");
         const bool miktex = isMiKTeXExecutable(*executable);
-        const fs::path launcher = latexmk.value_or(*executable);
+        const fs::path launcher = *executable;
         std::wstring commandLine = quote(launcher.wstring());
-        if (latexmk)
-        {
-            commandLine += command.m_engine == KCompilerEngine::PdfLatex ? L" -pdf" :
-                command.m_engine == KCompilerEngine::XeLatex ? L" -pdfxe" : L" -pdflua";
-            commandLine += L" -use-make -interaction=nonstopmode -halt-on-error -file-line-error"
-                L" -no-shell-escape -synctex=1 ";
-        }
-        else
-        {
-            commandLine += L" -interaction=nonstopmode -halt-on-error -file-line-error"
-                L" -no-shell-escape -synctex=1 ";
-            if (miktex) commandLine += L"--disable-installer ";
-        }
+        commandLine += L" -interaction=nonstopmode -halt-on-error -file-line-error"
+            L" -no-shell-escape -synctex=1 ";
+        if (miktex) commandLine += L"--disable-installer ";
         commandLine += quote(fromUtf8(command.m_mainFileId));
         STARTUPINFOW startup{}; startup.cb = sizeof(startup);
         startup.dwFlags = STARTF_USESTDHANDLES;
@@ -424,7 +537,19 @@ public:
         result.m_diagnostics = diagnostics(result.m_output, command.m_mainFileId);
         if (result.m_terminal == KCompilerTerminal::Succeeded)
         {
-            const fs::path stem = mainPath.parent_path() / mainPath.stem();
+            result.m_rerunRequired = previousAuxiliary != auxiliaryState() ||
+                result.m_output.find("Rerun to get") != std::string::npos ||
+                result.m_output.find("Please rerun LaTeX") != std::string::npos;
+            const auto currentAuxiliary = auxiliaryState();
+            const std::string auxiliaryText(currentAuxiliary[0].begin(), currentAuxiliary[0].end());
+            if (auxiliaryText.find("\\bibdata") != std::string::npos ||
+                result.m_output.find("Citation") != std::string::npos ||
+                fs::exists(stem.wstring() + L".bcf"))
+            {
+                result.m_diagnostics.push_back({KCompilerDiagnosticSeverity::Warning,
+                    command.m_mainFileId, 0,
+                    "References may be incomplete: automatic BibTeX/Biber processing is not supported."});
+            }
             KResult<std::vector<std::uint8_t>> pdf = readBoundedFile(stem.wstring() + L".pdf", kMaxPdfArtifactBytes);
             if (const KError* failure = std::get_if<KError>(&pdf)) return *failure;
             result.m_pdf = std::get<std::vector<std::uint8_t>>(std::move(pdf));
@@ -485,6 +610,7 @@ private:
     fs::path m_cache;
     std::vector<fs::path> m_roots;
     std::shared_ptr<const IKCompilerRootSource> m_rootSource;
+    bool m_allowSystemDiscovery;
 };
 
 KResult<KWindowsBuildAdapters> createWindowsBuildAdapters(const KWindowsBuildOptions& options)
@@ -493,16 +619,21 @@ KResult<KWindowsBuildAdapters> createWindowsBuildAdapters(const KWindowsBuildOpt
     {
         const std::wstring workspaceWide = fromUtf8(options.m_workspaceRootUtf8);
         const std::wstring cacheWide = fromUtf8(options.m_cacheRootUtf8);
-        if (workspaceWide.empty() || cacheWide.empty())
+        if (cacheWide.empty())
             return KError{KErrorCode::InvalidArgument, "build.invalidRoot", false};
         std::error_code error;
-        const fs::path workspace = fs::canonical(workspaceWide, error);
-        if (error || !fs::is_directory(workspace, error))
-            return KError{KErrorCode::InvalidArgument, "build.invalidRoot", false};
+        std::optional<fs::path> workspace;
+        if (!workspaceWide.empty())
+        {
+            workspace = fs::canonical(workspaceWide, error);
+            if (error || !fs::is_directory(*workspace, error))
+                return KError{KErrorCode::InvalidArgument, "build.invalidRoot", false};
+        }
         fs::create_directories(cacheWide, error);
         if (error) return KError{KErrorCode::Unavailable, "build.cacheFailure", true};
         const fs::path cache = fs::canonical(cacheWide, error);
-        if (error || belowOrEqual(workspace, cache) || belowOrEqual(cache, workspace))
+        if (error || (workspace &&
+            (belowOrEqual(*workspace, cache) || belowOrEqual(cache, *workspace))))
             return KError{KErrorCode::InvalidArgument, "build.cacheOverlap", false};
         std::vector<fs::path> roots;
         for (const std::string& root : options.m_texRootsUtf8)
@@ -511,9 +642,9 @@ KResult<KWindowsBuildAdapters> createWindowsBuildAdapters(const KWindowsBuildOpt
             if (!wide.empty()) roots.emplace_back(wide);
         }
         KWindowsBuildAdapters result;
-        result.m_snapshots = std::make_shared<KLocalBuildSnapshotStore>(workspace, cache);
+        result.m_snapshots = std::make_shared<KLocalBuildSnapshotStore>(std::move(workspace), cache);
         result.m_compiler = std::make_shared<KWindowsCompilerBackend>(cache, std::move(roots),
-            options.m_texRootSource);
+            options.m_texRootSource, options.m_allowSystemDiscovery);
         return result;
     }
     catch (...) { return KError{KErrorCode::Unavailable, "build.adapterFailure", true}; }

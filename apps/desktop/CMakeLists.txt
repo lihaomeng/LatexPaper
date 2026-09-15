@@ -4,6 +4,7 @@ target_link_libraries(lol_composition PUBLIC lol_platform_ports
   PRIVATE lol_system_app lol_workspace_app lol_document_app lol_search_app lol_build_app
   lol_preview_app lol_navigation_app lol_preferences_app lol_preferences_inbound
   lol_session_app lol_session_inbound
+  lol_export_app lol_export_inbound lol_export_adapter_localfs
   lol_preferences_app lol_session_app
   lol_workspace_adapter_localfs lol_document_adapter_localfs lol_workspaceworkflow_app
   lol_search_adapter_localfs lol_build_adapter_windows lol_preview_adapter_localfs

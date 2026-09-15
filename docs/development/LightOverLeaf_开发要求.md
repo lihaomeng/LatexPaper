@@ -232,7 +232,7 @@ modules/<module>/
 - 可以依赖对应 Outbound Port、技术基础设施和必要第三方库。
 - 不得调用其他 Adapter，不得编排跨模块业务。
 - 将平台错误转换为 Application 可理解的稳定错误。
-- 每种技术实现独立 Target，例如系统 TeX Live、MiKTeX 和 Portable TeX 分开。
+- 每种技术实现独立 Target；开发态系统 TeX Adapter 与产品态严格内置 MiKTeX Adapter 分开。
 
 ### 7.6 Composition Root
 
@@ -708,15 +708,9 @@ Build 模块不读取 Monaco 状态，也不直接询问 React。编译输入必
 
 ### 15.2 编译器发现
 
-发现顺序：
+产品版只有一种发现规则：若应用旁存在 `runtime/miktex`，Build 与 SyncTeX 只允许使用该源码构建 Runtime，并关闭用户配置、系统目录与 PATH 回退。Runtime 不完整时，编辑、保存和项目管理仍可用，但编译明确返回 `COMPILER_NOT_FOUND`/Runtime 不完整提示。
 
-1. 用户明确配置的 TeX Root。
-2. 应用旁 `runtime/miktex` 源码构建 Runtime。
-3. 可选 Portable TeX Live。
-4. 系统 TeX Live。
-5. 系统 MiKTeX。
-
-找不到编译器时，编辑、保存和项目管理仍可用，并返回 `COMPILER_NOT_FOUND` 与配置入口。
+未携带 Runtime 的开发构建可按测试 Root、`LIGHTOVERLEAF_TEX_ROOT`、开发配置和系统常见目录进行发现。该回退只服务开发和 Adapter 替换测试，不构成发布形态。
 
 ### 15.3 编译任务
 
@@ -811,7 +805,7 @@ web/src/
 每个 Outbound Port 至少有一个 Fake。关键 Adapter 通过同一套合约测试：
 
 - `KInMemoryDocumentStore` 与本地文件 Adapter。
-- Fake Compiler、System TeX Live、MiKTeX、Portable TeX。
+- Fake Compiler、开发态系统 TeX Adapter 与产品态严格内置 MiKTeX Adapter。
 - In-memory Preferences/Session Store 与 SQLite Adapter。
 - Loopback Transport 与 CEF Transport。
 
@@ -898,12 +892,11 @@ web/src/
 
 ### 21.3 发布形态
 
-- Lite：不包含 Portable TeX，使用用户配置或系统 TeX。
-- Full：包含且只包含一个经过验证的 TeX Runtime，可选 Portable TeX Live 或独立源码构建的 MiKTeX。
+只发布 `Full` Windows x64 绿色目录，并且只包含独立源码构建、经过验证的 MiKTeX Runtime。Lite、Portable TeX Live、单文件自解压 EXE 和运行时归档均不再是产品发布形态。
 
-两种发布形态使用相同 `IKCompilerBackend` 和 Application，差异只存在于 Composition Root、安装内容和能力报告中。
+最终目录保留 Qt、CEF、Web、许可证与 `runtime/miktex` 的原始层级；用户直接运行 `LightOverLeaf.exe`。启动过程不得创建或展开 `payload.zip`/`payload.7z`，不得调用归档工具、CMD 或 PowerShell。发布目录可整体复制，不能只分发入口 EXE。
 
-MiKTeX 源码必须在独立工作区构建并安装到隔离目录，不得作为 LightOverLeaf 默认 CMake 子目录或业务静态库。Full 打包只消费安装后的 Runtime；运行时禁止自动下载缺失宏包。构建、来源校验、宏包准备和打包流程见 [MiKTeX 源码构建与集成](MiKTeX源码构建与集成.md)。
+Build Application、RPC 和 React 继续只依赖 `IKCompilerBackend` 等端口。MiKTeX 源码必须在独立工作区构建并安装到隔离目录，不得作为 LightOverLeaf 默认 CMake 子目录或业务静态库。打包只消费安装后的 Runtime；运行时禁止自动下载缺失宏包。详细决策见 [ADR 0017](../architecture/adr/0017-full-green-directory-release.md) 与 [MiKTeX 源码构建与集成](MiKTeX源码构建与集成.md)。
 
 ## 22. 分阶段实施计划
 
@@ -917,7 +910,8 @@ MiKTeX 源码必须在独立工作区构建并安装到隔离目录，不得作�
 | M5 Search/Build | 搜索、Snapshot、编译、取消和诊断 | Search/Build 模块及多个 Backend | 切换 TeX Backend 不改 Use Case |
 | M6 Preview/Navigation | PDF Artifact、PDF.js 和 SyncTeX | Preview/Navigation 模块 | PDF 路径不暴露给前端 |
 | M7 Preferences/Session | 设置、恢复、历史和质量完善 | SQLite Adapter、恢复 Fixture | In-memory Store 可替换 SQLite |
-| M8 发布 | Lite/Full 打包和干净环境验证 | 安装包、许可证、验收记录 | 两种包共享同一 Application |
+| M8 发布 | Full 绿色目录和干净环境验证 | 完整目录、许可证、清单、验收记录 | 发布装配严格内置 MiKTeX，业务层保持端口化 |
+| M9 托管草稿与实时预览 | 草稿无路径编译、Latest-wins 与独立导出 | Overlay Snapshot、实时调度、Export Application | 编译不依赖导出路径，Adapter 不互调 |
 
 不得用大量 UI 占位掩盖底层能力和解耦验收未完成。
 
@@ -956,7 +950,7 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 
 ## 25. 实施状态与下一条完整业务链路
 
-更新日期：2026-09-12。本节区分计划与已实现代码，不降低前述验收要求。
+更新日期：2026-09-13。本节区分计划与已实现代码，不降低前述验收要求。
 
 - M0：架构骨架、显式 Target、依赖检查、契约生成和双语言 Fixture 已建立，历史验证见 `docs/acceptance/M0.md`。
 - M1：Qt/CEF 外壳新增独立纯 C++ 生命周期策略、两次 Renderer 恢复上限、加载与关闭超时。Qt 只依赖浏览器端口；CEF 不调用 Qt 实现。CEF 子窗口通过父 HWND 的原生客户区尺寸适配 Qt 高 DPI，不把逻辑像素直接用于 Win32 子窗口。当前 Smoke 覆盖草稿工作台就绪与重载，不承诺未保存原生项目文档恢复。
@@ -966,9 +960,10 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 - M5：Search/Build 的端口、快照、latexmk 优先与直接引擎回退、Windows 进程后端、取消、超时、实时有界状态/日志和分级诊断已贯通；源码版 MiKTeX XeLaTeX 已真实生成 PDF 与 SyncTeX。完整论文宏包、BibTeX/Biber 编排和干净机流程仍待发布级验收。
 - M6：Preview Artifact、分块 RPC、PDF.js 离线 Worker、50%～300% 缩放、编辑器/PDF 双向定位和 Windows SyncTeX 命令适配器已贯通。真实适配器通过私有临时目录物化 PDF/`.synctex.gz`、无 Shell 启动、Job Object、超时、输出上限和严格解析；Basic Fake 仅用于测试，生产无命令时使用 Unavailable Adapter。Artifact 缓存有 ID 校验、并发保护及 20 项/512 MiB 治理。运行时只在发现 `synctex.exe` 后报告 `syncTex=true`；本机无 TeX，真实论文端到端仍待外部环境验收。
 - M7：Preferences/Session 独立模块、SQLite Adapter、RPC、设置页、新建项目、保存后 900 ms 自动编译，以及布局/标签/编辑区宽度/光标/PDF 缩放恢复和最近项目已贯通；可见 CEF 窗口人工复验待补。
-- M8：Lite 与源码版 MiKTeX Full 单文件可运行 EXE 均已生成并直接 smoke 通过；外层使用静态运行库的原生 Windows GUI 启动器和隐藏的 7-Zip 子进程，不执行 `.cmd` 或创建命令行窗口。Full 对 Portable TeX Live／源码构建 MiKTeX 保持二选一载荷接口。代码签名与干净虚拟机人工验收仍待完成。
+- M8：发布形态已收敛为源码版 MiKTeX Full 绿色目录。单文件自解压启动器、Lite、Portable TeX 与 7-Zip 运行链路均已移除；入口为 Windows GUI Subsystem，直接目录 smoke 与内置 XeLaTeX PDF/SyncTeX 实编译通过。代码签名与独立干净虚拟机人工编辑/编译/预览仍待完成。
+- M9：用户已确认只有显式导出/另存为才要求目标路径；打开已有项目仍可选择源目录，已有项目普通保存不重复选择。2026-09-14 已实现有界 Overlay Snapshot、空基础草稿编译、草稿手动/900 ms 前端防抖入口、旧 PDF 字节保留和显式“导出草稿”入口，Release 自动化与新 Full 绿色目录通过。原生 Generation/Latest-wins、Preferences 三态、PDF.js 原子提交、独立 Export Application/destinationToken 及发布级人工验收仍未完成，不得描述为 M9 整体完成。
 
-最新逐阶段状态、证据和产物路径统一见 `docs/development/阶段进度.md`、`docs/acceptance/性能与遗留收口.md` 与 `docs/acceptance/M5-search-build.md`～`M8-release.md`，不得用本节历史段落覆盖最新验收结论。
+最新逐阶段状态、证据和产物路径统一见 `docs/development/阶段进度.md`、`docs/acceptance/性能与遗留收口.md`、`docs/acceptance/M5-search-build.md`～`M8-release.md` 与 `docs/acceptance/M9-live-preview.md`，不得用本节历史段落覆盖最新验收结论。
 
 2026-09-11 界面增量：参考用户截图写入深色三栏工作台、文件树、大纲和 Monaco 草稿编辑。草稿恢复适配器与原生项目文件服务分离；设计见 ADR 0003。64 项前端测试和桌面双配置各 11 项测试通过，但 Monaco style 属性仍被严格 CSP 阻止，视觉验收未通过，等待用户确认样式权限。不能据此将 M2/M4 标记为全部完成。详见 `docs/acceptance/M2-draft-workbench.md`。
 
@@ -986,7 +981,7 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 
 ## 26. 顺序执行与本地阶段记录
 
-根据用户要求，自 2026-09-11 起严格按第 22 节 M0 → M8 顺序推进，阶段状态统一维护于 [阶段进度](阶段进度.md)。
+根据用户要求，自 2026-09-11 起严格按第 22 节顺序推进；2026-09-13 起阶段范围扩展为 M0 → M9。阶段状态统一维护于 [阶段进度](阶段进度.md)。
 
 1. 开始阶段前，核对其前置阶段验收记录、现有实现和剩余问题；不重复冒领历史成果。
 2. 当前阶段达到第 23 节完成定义后，先在 `docs/acceptance/` 写入实际改动、模块边界、测试命令与结果、证据位置、风险和未验证项，再更新阶段总表，之后进入下一阶段。
@@ -995,4 +990,33 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 5. 阶段失败或阻塞时立即记录原因、已尝试的安全方案、缺少的权限或条件；不跳过、不伪报完成。涉及新增安全权限时必须取得明确授权。
 6. 每次修改后按风险执行相关回归；历史命令不能冒充本次验证。仅修改文档时明确记载未重新构建或测试。
 7. 每阶段完成后向用户简要报告阶段名称、验收结论及本地记录路径。若后续修改破坏已验收能力，记录回归并修复后再继续推进。
-8. 用户最新要求连续执行至 M8：阶段通过后记录并直接继续，不再询问是否继续。此授权不扩大产品范围或安全权限；未完成、未测试和外部条件不足必须如实记录，禁止用阶段编号推进代替实际交付。
+8. 用户此前授权连续执行至 M8；2026-09-14 已明确要求开始修改 M9 的无路径编译问题。实施仍须按 M9 子阶段记录，不能把核心增量自动扩展为新增安全权限，也不能在 Latest-wins、独立导出和发布级验收前宣称 M9 整体完成。
+
+## 27. 托管草稿、实时预览与独立导出
+
+本节是 M9 的规范性要求。对于草稿预览，它取代第 14.3 节“先保存全部 Dirty Buffer 再创建 Build Snapshot”的旧前置条件；已有本地项目的显式保存与 Revision 冲突规则保持不变。详细设计见 [ADR 0018](../architecture/adr/0018-managed-draft-live-preview.md) 和 [M9 开发计划](实时预览与托管草稿开发计划.md)。
+
+1. 新建内容立即获得稳定 Draft ID。新建、编辑、检查点、恢复、手动编译与实时预览不得要求用户目标路径。
+2. 打开已有项目可以选择源目录；只有用户显式导出或另存为时才选择目标目录。已有项目普通保存使用既有授权 Workspace，不重复弹窗。
+3. Monaco Model 是未保存正文的唯一可修改事实来源。Build 只消费带 Generation 的不可变 Overlay Snapshot，不得回写编辑器、Draft Store 或 Workspace。
+4. 新草稿快照由空基础快照加全部草稿 Overlay 构成；已有项目由固定 Revision 的只读基础快照加 Dirty Overlay 构成。任何编译准备都不得修改用户文件。
+5. 编译调度默认使用 900 ms 停止输入防抖；同一会话最多一个活动 Job 和一个合并后的最新 Pending Generation。旧任务必须协作取消，所有迟到事件和 Artifact 必须按 Generation 丢弃。
+6. 新编译开始、失败或取消时保留上一份成功 PDF。只有 Artifact 完整校验且 PDF.js 加载成功后才能原子切换；错误必须区分 snapshot、detect、compile、artifact 和 render。
+7. Preferences 使用 manual、onSave、live 三态。已有布尔设置按 true 到 onSave、false 到 manual 迁移；没有旧记录的新用户默认 live。
+8. Export 是独立 Application Use Case，不得依赖或启动 Build。Qt 只负责选择目录与登记授权；Local Filesystem Adapter 负责校验、原子非覆盖写入和 Partial Export 报告。
+9. React 和通用 RPC 不得接收绝对路径。原生目录授权以会话绑定、用途绑定、有期限、单次消费的 destinationToken 表示；取消、过期、重复使用和跨会话使用必须失败。
+10. M9 当前已完成 Overlay Snapshot 与草稿直接编译的核心增量及自动化，但原生 Latest-wins、Preferences 三态、PDF.js 原子切换、独立 Export Application/destinationToken 和发布级人工验收仍未完成。只有 [M9 验收记录](../acceptance/M9-live-preview.md) 满足第 23 节完成定义后，才能宣称 M9 整体交付。
+
+## 2026-09-15：日常开发构建规则
+
+用户要求后续日常修改仅以 `scripts/build.ps1 --dev` 构建通过作为默认验证，不编译测试目标、不执行 CTest 或 npm test。
+
+在项目根目录运行：
+
+```powershell
+.\scripts\build.ps1 --dev
+```
+
+默认构建 desktop-release。可指定其他预设，例如 `scripts/build.ps1 -Preset desktop-debug --dev`。开发模式显式设置 BUILD_TESTING=OFF，前端执行 npm ci 和 npm run build（含 TypeScript 与协议生成），保留配置阶段架构检查。产物仍在所选 preset 的 bin/Release 或 bin/Debug 中，现存测试二进制不会被删除，也不会参与本次构建。
+
+不带 --dev 的 build.ps1 会重新配置为 BUILD_TESTING=ON、LIGHTOVERLEAF_DEV_BUILD=OFF，恢复原构建流程。测试与打包脚本仍保留为显式命令；后续不自动调用，除非用户另行要求。

@@ -150,6 +150,7 @@ std::optional<fs::path> findExecutable(const KWindowsSyncTexOptions& options)
         candidates.push_back(root / L"bin" / L"windows" / L"synctex.exe");
         candidates.push_back(root / L"bin" / L"win32" / L"synctex.exe");
         candidates.push_back(root / L"miktex" / L"bin" / L"x64" / L"synctex.exe");
+        candidates.push_back(root / L"texmfs" / L"install" / L"miktex" / L"bin" / L"x64" / L"synctex.exe");
     }
     for (const fs::path& candidate : candidates)
     {
@@ -160,7 +161,7 @@ std::optional<fs::path> findExecutable(const KWindowsSyncTexOptions& options)
         if (!error)
             return canonical;
     }
-    if (!options.m_executableUtf8.empty())
+    if (!options.m_executableUtf8.empty() || !options.m_allowSystemDiscovery)
         return std::nullopt;
     const DWORD required = SearchPathW(nullptr, L"synctex.exe", nullptr, 0, nullptr, nullptr);
     if (required == 0)

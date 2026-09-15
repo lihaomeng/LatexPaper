@@ -35,8 +35,8 @@ export class FakeSystemTransport implements SystemTransport {
 export class SystemRpcClient {
   private readonly pending = new Set<string>();
   constructor(private readonly transport: SystemTransport, private readonly timeoutMs = 5000) {
-    // Build contracts allow 300 s; the transport adds a bounded 5 s response margin.
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 305000) throw new Error('INVALID_TIMEOUT');
+    // Build RPC allows 300 s compilation + 60 s preparation; client adds 5 s response margin.
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 365000) throw new Error('INVALID_TIMEOUT');
   }
 
   async request(request: RpcRequest, signal?: AbortSignal): Promise<Response> {

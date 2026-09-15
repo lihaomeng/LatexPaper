@@ -182,7 +182,23 @@ int main()
     KApplicationRpcHandler handler(createCapabilities({true, false, false, false}), sharedWorkflow,
         std::make_shared<KFakePreferences>(), std::make_shared<KFakeSessions>());
 
-    KValue response = handler.dispatch(request("before-open", "document.open",
+    KValue response = handler.dispatch(request("draft-detect", "build.detect"), std::nullopt, {});
+    check(v2::validateBuildDetectResponse(response), "draft compiler detection does not require workspace");
+    const KValue::KArray draftOverlay{KValue{KValue::KObject{
+        {"fileId", KValue{std::string("main.tex")}},
+        {"content", KValue{std::string("draft")}}}}};
+    response = handler.dispatch(request("draft-build", "build.start",
+        {{"jobId", KValue{std::string("job-draft")}},
+         {"snapshotId", KValue{std::string("snapshot-draft")}},
+         {"mainFileId", KValue{std::string("main.tex")}},
+         {"engine", KValue{std::string("xelatex")}},
+         {"timeoutMs", KValue{3000.0}},
+         {"overlayFiles", KValue{draftOverlay}},
+         {"scopeId", KValue{std::string("draft-scope")}},
+         {"generation", KValue{1.0}}}), std::nullopt, {});
+    check(v2::validateBuildStartResponse(response), "draft overlay build does not require workspace");
+
+    response = handler.dispatch(request("before-open", "document.open",
         {{"fileId", KValue{std::string("章节/引言.tex")}}}), std::nullopt, {});
     check(v2::validateErrorResponse(response) && errorCode(response) == "WORKSPACE_NOT_OPEN",
         "document requires active workspace");
@@ -246,7 +262,7 @@ int main()
     response = handler.dispatch(request("build", "build.start",
         {{"jobId", KValue{std::string("job-1")}}, {"snapshotId", KValue{std::string("snapshot-1")}},
          {"mainFileId", KValue{std::string("main.tex")}}, {"engine", KValue{std::string("xelatex")}},
-         {"timeoutMs", KValue{3000.0}}}), std::nullopt, {});
+         {"timeoutMs", KValue{3000.0}}, {"overlayFiles", KValue{KValue::KArray{}}}, {"scopeId", KValue{std::string("project-scope")}}, {"generation", KValue{1.0}}}), std::nullopt, {});
     check(v2::validateBuildStartResponse(response), "build start response");
     response = handler.dispatch(request("status", "build.status",
         {{"jobId", KValue{std::string("job-1")}}}), std::nullopt, {});
@@ -271,7 +287,7 @@ int main()
     response = handler.dispatch(request("preferences-update", "preferences.update",
         {{"texRoot", KValue{std::string("D:/texlive")}},
          {"engine", KValue{std::string("lualatex")}}, {"timeoutMs", KValue{45000.0}},
-         {"autoCompile", KValue{true}}}), std::nullopt, {});
+         {"compileMode", KValue{"live"}}}), std::nullopt, {});
     check(v2::validatePreferencesGetResponse(response), "preferences update response");
     response = handler.dispatch(request("session-save", "session.save",
         {{"workspaceRoot", KValue{std::string("D:/论文")}},

@@ -1,11 +1,10 @@
 #requires -Version 5.1
 param(
-    [string]$PortableTexRoot = '',
-    [string]$MiKTeXRoot = '',
+    [string]$MiKTeXRoot = 'D:/CodeMyself/QTBest/thirdparty_install/miktex',
     [switch]$SkipBuild,
-    [ValidateRange(60, 1800)][int]$SmokeTimeoutSeconds = 600
+    [ValidateRange(30, 600)][int]$SmokeTimeoutSeconds = 120
 )
-& (Join-Path $PSScriptRoot 'package-onefile.ps1') -Mode Full `
-    -PortableTexRoot $PortableTexRoot -MiKTeXRoot $MiKTeXRoot -SkipBuild:$SkipBuild `
-    -SmokeTimeoutSeconds $SmokeTimeoutSeconds
+Write-Warning 'Compatibility entry: use package.ps1 for the Full MiKTeX green directory.'
+& (Join-Path $PSScriptRoot 'package.ps1') -MiKTeXRoot $MiKTeXRoot `
+    -SkipBuild:$SkipBuild -SmokeTimeoutSeconds $SmokeTimeoutSeconds
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

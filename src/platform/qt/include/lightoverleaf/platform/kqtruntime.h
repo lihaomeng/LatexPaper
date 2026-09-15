@@ -15,6 +15,7 @@ public:
     std::string cachePath() const;
     std::string resourcePath() const;
     std::optional<std::string> selectWorkspace() const;
+    std::optional<std::string> selectExportDestination() const;
     int run(IKBrowserSurface& surface, bool smokeTest);
 
 private:

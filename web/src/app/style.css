@@ -142,6 +142,8 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .shortcut { display: flex; justify-content: space-between; border-bottom: 1px solid #3b4654; padding: 7px 0; }
 kbd { font: 10px Consolas, monospace; color: #a7bdc8; background: #1d2630; border-radius: 3px; padding: 1px 6px; }
 .pdf-viewer { height: 100%; min-height: 0; display: flex; flex-direction: column; width: 100%; }
+.pdf-render-status { flex: none; padding: 6px 10px; text-align: center; font-size: 11px; color: #b8c7d2; background: #314052; border-bottom: 1px solid #536276; }
+.pdf-render-status.error { color: #ffd5d5; background: #55373d; border-color: #7a4a52; }
 .pdf-controls { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 6px; background: #252f40; }
 .zoom-controls { display: inline-flex; align-items: center; gap: 4px; margin-left: 14px; }
 .zoom-controls button:nth-child(2) { min-width: 54px; }

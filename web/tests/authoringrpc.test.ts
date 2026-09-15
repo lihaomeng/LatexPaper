@@ -8,6 +8,12 @@ test('authoring RPC keeps search, detection, build and cancellation contracts se
   const transport: SystemTransport = { send: (wire, success) => {
     const request = JSON.parse(wire);
     methods.push(request.method);
+    if (request.method === 'build.start') {
+      assert.equal(request.params.scopeId, 'job-1');
+      assert.equal(request.params.generation, 1);
+      assert.deepEqual(request.params.overlayFiles,
+        [{ fileId: 'main.tex', content: '\\documentclass{article}' }]);
+    }
     const base = { version: 2, id: request.id, clientSequence: request.clientSequence, ok: true,
       method: request.method };
     const result = request.method === 'search.start' ? { hits: [{ fileId: 'main.tex', line: 2,
@@ -16,16 +22,17 @@ test('authoring RPC keeps search, detection, build and cancellation contracts se
         engines: ['xelatex'] }] }
       : request.method === 'build.start' ? { jobId: request.params.jobId, terminal: 'succeeded',
         exitCode: 0, output: '', outputTruncated: false, diagnostics: [],
-        artifactId: 'artifact-1', syncTexAvailable: true }
+        artifactId: 'artifact-1', syncTexAvailable: true, generation: request.params.generation, phase: 'artifact' }
       : request.method === 'build.status' ? { jobId: request.params.jobId, state: 'running',
-        output: 'partial', outputTruncated: false }
+        output: 'partial', outputTruncated: false, generation: 1, phase: 'compile' }
       : { accepted: true };
     success(JSON.stringify({ ...base, result })); return () => {};
   } };
   const client = new AuthoringRpcClient(new SystemRpcClient(transport));
   assert.equal((await client.search('中文')).hits[0].line, 2);
   assert.equal((await client.detect()).toolchains[0].engines[0], 'xelatex');
-  assert.equal((await client.build('job-1', 'snapshot-1', 'main.tex', 'xelatex', 3000)).terminal, 'succeeded');
+  assert.equal((await client.build('job-1', 'snapshot-1', 'main.tex', 'xelatex', 3000,
+    [{ fileId: 'main.tex', content: '\\documentclass{article}' }])).terminal, 'succeeded');
   assert.equal((await client.status('job-1')).output, 'partial');
   assert.equal(await client.cancel('job-1'), true);
   assert.deepEqual(methods, ['search.start', 'build.detect', 'build.start', 'build.status', 'build.cancel']);

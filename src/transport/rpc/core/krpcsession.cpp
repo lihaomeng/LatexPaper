@@ -15,7 +15,7 @@ KRpcSession::~KRpcSession() { close(); }
 KRequestStart KRpcSession::begin(const std::string& id, std::uint64_t nowMs, std::uint64_t timeoutMs)
 {
     if (m_closed) return {KRequestAdmission::Closed, std::nullopt};
-    if (!v2::validateRequestId(KValue{id}) || nowMs < m_nowMs || timeoutMs == 0 || timeoutMs > 60000 ||
+    if (!v2::validateRequestId(KValue{id}) || nowMs < m_nowMs || timeoutMs == 0 || timeoutMs > 360000 ||
         nowMs > std::numeric_limits<std::uint64_t>::max() - timeoutMs)
         return {KRequestAdmission::Invalid, std::nullopt};
     m_nowMs = nowMs;

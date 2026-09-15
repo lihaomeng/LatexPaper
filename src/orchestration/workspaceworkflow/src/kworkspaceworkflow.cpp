@@ -41,7 +41,11 @@ public:
             return KError{KErrorCode::Internal, "document.factoryFailure", false};
         }
         m_search.reset();
-        { std::scoped_lock lock(m_buildMutex); m_builds.reset(); }
+        {
+            std::scoped_lock lock(m_buildMutex);
+            m_builds.reset();
+            m_nativeSelection.clear();
+        }
         if (m_searchFactory)
         {
             KResult<std::unique_ptr<search::IKSearch>> search = m_searchFactory(nativeSelection);
@@ -56,7 +60,11 @@ public:
             std::shared_ptr<build::IKBuilds> nextBuilds =
                 std::get<std::shared_ptr<build::IKBuilds>>(std::move(builds));
             if (!nextBuilds) { close(); return KError{KErrorCode::Internal, "build.factoryFailure", false}; }
-            { std::scoped_lock lock(m_buildMutex); m_builds = std::move(nextBuilds); }
+            {
+                std::scoped_lock lock(m_buildMutex);
+                m_builds = std::move(nextBuilds);
+                m_nativeSelection = nativeSelection;
+            }
         }
         return std::get<workspace::KWorkspaceState>(std::move(opened));
     }
@@ -71,7 +79,11 @@ public:
     }
     void close() noexcept override
     {
-        { std::scoped_lock lock(m_buildMutex); m_builds.reset(); }
+        {
+            std::scoped_lock lock(m_buildMutex);
+            m_builds.reset();
+            m_nativeSelection.clear();
+        }
         m_search.reset();
         m_documents.reset();
         m_workspaces->close();
@@ -127,19 +139,16 @@ public:
     }
     KResult<std::vector<build::KCompilerCapability>> detectCompilers(std::stop_token stop) override
     {
-        if (!m_workspaces->state()) return notOpen();
-        std::shared_ptr<build::IKBuilds> builds;
-        { std::scoped_lock lock(m_buildMutex); builds = m_builds; }
-        if (!builds) return KError{KErrorCode::Unavailable, "build.notAvailable", false};
-        return builds->detect(stop);
+        KResult<std::shared_ptr<build::IKBuilds>> resolved = resolveBuilds();
+        if (const KError* failure = std::get_if<KError>(&resolved)) return *failure;
+        return std::get<std::shared_ptr<build::IKBuilds>>(std::move(resolved))->detect(stop);
     }
     KResult<build::KBuildResult> startBuild(const build::KBuildCommand& command,
         std::stop_token stop) override
     {
-        std::shared_ptr<build::IKBuilds> builds;
-        { std::scoped_lock lock(m_buildMutex); builds = m_builds; }
-        if (!builds) return KError{KErrorCode::Unavailable, "build.notAvailable", false};
-        return builds->start(command, stop);
+        KResult<std::shared_ptr<build::IKBuilds>> resolved = resolveBuilds();
+        if (const KError* failure = std::get_if<KError>(&resolved)) return *failure;
+        return std::get<std::shared_ptr<build::IKBuilds>>(std::move(resolved))->start(command, stop);
     }
     KResult<bool> cancelBuild(const std::string& jobId) override
     {
@@ -175,6 +184,27 @@ public:
     }
 
 private:
+    KResult<std::shared_ptr<build::IKBuilds>> resolveBuilds()
+    {
+        std::string nativeSelection;
+        {
+            std::scoped_lock lock(m_buildMutex);
+            if (m_builds) return m_builds;
+            nativeSelection = m_nativeSelection;
+        }
+        if (!m_buildFactory)
+            return KError{KErrorCode::Unavailable, "build.notAvailable", false};
+        KResult<std::shared_ptr<build::IKBuilds>> created = m_buildFactory(nativeSelection);
+        if (const KError* failure = std::get_if<KError>(&created)) return *failure;
+        std::shared_ptr<build::IKBuilds> candidate =
+            std::get<std::shared_ptr<build::IKBuilds>>(std::move(created));
+        if (!candidate) return KError{KErrorCode::Internal, "build.factoryFailure", false};
+        std::scoped_lock lock(m_buildMutex);
+        if (!m_builds) m_builds = std::move(candidate);
+        return m_builds;
+    }
+
+private:
     std::unique_ptr<workspace::IKWorkspaces> m_workspaces;
     KDocumentFactory m_documentFactory;
     KSearchFactory m_searchFactory;
@@ -182,6 +212,7 @@ private:
     std::unique_ptr<document::IKDocuments> m_documents;
     std::unique_ptr<search::IKSearch> m_search;
     std::shared_ptr<build::IKBuilds> m_builds;
+    std::string m_nativeSelection;
     mutable std::mutex m_buildMutex;
     std::shared_ptr<preview::IKPreviewArtifacts> m_previews;
     std::shared_ptr<navigation::IKNavigation> m_navigation;
