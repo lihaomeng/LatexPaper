@@ -44,3 +44,9 @@ Electron 本轮记录见 [迁移记录](docs/acceptance/electron-migration.md)�
 浏览器独立开发仍可在 `frontend/web/` 运行 `npm run dev`，仅明确的浏览器开发模式允许 Fake NativeApi；桌面构建通道缺失时报告错误。
 
 脚本职责和迁移路径见 [脚本说明](scripts/README.md)。构建产物集中在 `out/`，浏览器检查产物集中在 `out/verification/`。
+
+## 原生构建目录
+
+C++ 工程入口、预设与构建辅助文件集中在 `backend/latexlocalservice/`：`CMakeLists.txt`、`CMakePresets.json`、`cmake/` 和 `tools/architecture/`。
+日常仍从仓库根目录执行 `./scripts/build.ps1 --dev`；脚本自动进入服务目录，并在源码入口变更时刷新旧 CMake 缓存。产物仍写入根目录 `out/`。
+共享的 `contracts/`、`tests/fixtures/` 和跨前后端构建脚本保留在根目录。

@@ -5,7 +5,7 @@
       "name": "core-debug",
       "generator": "Visual Studio 16 2019",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/out/core-debug",
+      "binaryDir": "${sourceDir}/../../out/core-debug",
       "cacheVariables": {
         "BUILD_TESTING": "ON"
       }
@@ -13,7 +13,7 @@
     {
       "name": "desktop-debug",
       "inherits": "core-debug",
-      "binaryDir": "${sourceDir}/out/desktop-debug",
+      "binaryDir": "${sourceDir}/../../out/desktop-debug",
       "cacheVariables": {
         "LIGHTOVERLEAF_BUILD_DESKTOP": "ON"
       }
@@ -22,7 +22,7 @@
       "name": "core-release",
       "generator": "Visual Studio 16 2019",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/out/core-release",
+      "binaryDir": "${sourceDir}/../../out/core-release",
       "cacheVariables": {
         "BUILD_TESTING": "ON"
       }
@@ -30,7 +30,7 @@
     {
       "name": "desktop-release",
       "inherits": "core-release",
-      "binaryDir": "${sourceDir}/out/desktop-release",
+      "binaryDir": "${sourceDir}/../../out/desktop-release",
       "cacheVariables": {
         "LIGHTOVERLEAF_BUILD_DESKTOP": "ON"
       }
@@ -38,7 +38,7 @@
     {
       "name": "electron-dev",
       "inherits": "core-release",
-      "binaryDir": "${sourceDir}/out/electron-dev",
+      "binaryDir": "${sourceDir}/../../out/electron-dev",
       "cacheVariables": {
         "BUILD_TESTING": "OFF",
         "LIGHTOVERLEAF_BUILD_DESKTOP": "OFF",

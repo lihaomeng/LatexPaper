@@ -4,15 +4,17 @@ import subprocess
 import sys
 import tempfile
 
-root = Path(__file__).resolve().parents[2]
+service = Path(__file__).resolve().parents[2]
+root = service.parents[1]
 with tempfile.TemporaryDirectory(prefix='lol-architecture-') as directory:
     fixture = Path(directory)
     (fixture / 'CMakeLists.txt').write_text(f'''
 cmake_minimum_required(VERSION 3.21)
 project(InvalidArchitecture LANGUAGES NONE)
-set(PROJECT_SOURCE_DIR "{root.as_posix()}")
+set(PROJECT_SOURCE_DIR "{service.as_posix()}")
+set(LOL_REPO_ROOT "{root.as_posix()}")
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-include("{root.as_posix()}/cmake/ArchitectureRules.cmake")
+include("{service.as_posix()}/cmake/ArchitectureRules.cmake")
 add_library(lol_document_domain INTERFACE)
 lol_register(lol_document_domain domain document)
 add_library(lol_platform_qt INTERFACE)

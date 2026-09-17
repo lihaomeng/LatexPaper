@@ -30,3 +30,9 @@ MiKTeX 自身的源码构建工具位于 `tools/miktex/build-runtime.ps1`；打�
 
 所有构建产物放入 `out/`，浏览器检查截图放入 `out/verification/playwright/`。
 `.playwright-cli/` 是已忽略的工具状态，`paper1/` 是受版本管理的论文项目，不属于可清理构建产物。
+
+## 原生构建目录
+
+C++ 工程入口、预设与构建辅助文件集中在 `backend/latexlocalservice/`：`CMakeLists.txt`、`CMakePresets.json`、`cmake/` 和 `tools/architecture/`。
+日常仍从仓库根目录执行 `./scripts/build.ps1 --dev`；脚本自动进入服务目录，并在源码入口变更时刷新旧 CMake 缓存。产物仍写入根目录 `out/`。
+共享的 `contracts/`、`tests/fixtures/` 和跨前后端构建脚本保留在根目录。

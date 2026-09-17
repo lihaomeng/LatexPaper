@@ -151,10 +151,10 @@ if(LIGHTOVERLEAF_BUILD_DESKTOP)
 endif()
 add_test(NAME LightOverLeafArchitectureTests COMMAND "${Python3_EXECUTABLE}"
   "${PROJECT_SOURCE_DIR}/tools/architecture/check.py" --graph "${CMAKE_BINARY_DIR}/architecture.json"
-  --source "${PROJECT_SOURCE_DIR}" --self-test)
+  --source "${LOL_REPO_ROOT}" --self-test)
 
 
 add_test(NAME LightOverLeafIllegalDependencyTests COMMAND "${Python3_EXECUTABLE}"
   "${PROJECT_SOURCE_DIR}/tools/architecture/negativeconfigure.py")
 add_test(NAME LightOverLeafCodegenDriftTests COMMAND "${Python3_EXECUTABLE}"
-  "${PROJECT_SOURCE_DIR}/tools/contractcodegen/generate.py" --cpp-out "${LOL_GENERATED}" --check)
+  "${LOL_REPO_ROOT}/tools/contractcodegen/generate.py" --cpp-out "${LOL_GENERATED}" --check)

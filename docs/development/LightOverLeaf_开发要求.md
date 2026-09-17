@@ -786,7 +786,7 @@ frontend/web/src/
 
 ### 18.1 原生依赖检查
 
-`tools/architecture/` 提供脚本读取 CMake File API Codemodel 或 Target Graph，检查：
+`backend/latexlocalservice/tools/architecture/` 提供脚本读取 CMake File API Codemodel 或 Target Graph，检查：
 
 - Target 是否具有已知 Layer 和 Module 标记。
 - 依赖是否在白名单中。
@@ -1034,3 +1034,8 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 ## 2026-09-17：后端目录统一
 
 现行原生源码根为 backend/latexlocalservice，下设 texengine、workspace、persistence、transport、app；目录名不含连字符。历史文件树仅作设计背景，实际映射见 backend/latexlocalservice/README.md。C++ 头文件命名空间、Target 元数据与依赖规则保持不变；架构检查必须扫描新位置，不能因旧目录不存在而跳过校验。共享协议与夹具仍位于根目录 contracts 和 tests/fixtures。
+
+## 原生工程入口归属（2026-09-17）
+
+当前 CMake 工程根目录为 `backend/latexlocalservice/`，包含 `CMakeLists.txt`、`CMakePresets.json`、`cmake/` 和 `tools/architecture/`，取代历史示例中的仓库根目录入口。所有原生子模块显式纳入此工程。
+`PROJECT_SOURCE_DIR` 表示本地服务源码根目录；跨前后端共享资源通过 `LOL_REPO_ROOT` 访问。构建目录保持为仓库根目录 `out/<preset>`，日常命令保持 `./scripts/build.ps1 --dev`，不构建或运行测试。

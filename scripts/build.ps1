@@ -16,29 +16,29 @@ if ($Preset -eq 'electron-dev') {
     & (Join-Path $PSScriptRoot 'internal/build-electron.ps1') -Dev:$Dev -MiKTeXRoot $MiKTeXRoot -RefreshRuntime:$RefreshRuntime -FreshConfigure:$FreshConfigure
     return
 }
-Push-Location (Join-Path $PSScriptRoot '..')
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'internal/cmakecontext.ps1')
+Push-Location (Join-Path $repo 'backend/latexlocalservice')
 try {
     $testing = if ($Dev) { 'OFF' } else { 'ON' }
     $devMode = if ($Dev) { 'ON' } else { 'OFF' }
-    $configureArguments = @('--preset', $Preset, "-DBUILD_TESTING=$testing", "-DLIGHTOVERLEAF_DEV_BUILD=$devMode")
-    if ($FreshConfigure) {
-        Write-Host 'Fresh configure requested: CMake cache options will be reset to preset defaults.'
-        $configureArguments += '--fresh'
-    }
+    $configureArguments = @('--preset', $Preset)
+    $configureArguments += Get-CMakeRefreshArguments -Repo $repo -Preset $Preset -Fresh:$FreshConfigure
+    $configureArguments += @("-DBUILD_TESTING=$testing", "-DLIGHTOVERLEAF_DEV_BUILD=$devMode")
     & cmake @configureArguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & cmake --build --preset $Preset
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if ($Preset.StartsWith('desktop-')) {
         $configuration = if ($Preset.EndsWith('-debug')) { 'Debug' } else { 'Release' }
-        $runtimeDirectory = Join-Path (Get-Location).Path "out/$Preset/bin/$configuration"
+        $runtimeDirectory = Join-Path $repo "out/$Preset/bin/$configuration"
         foreach ($file in @('LightOverLeaf.exe', 'LightOverLeaf.dll', 'libcef.dll', 'web/index.html')) {
             if (!(Test-Path -LiteralPath (Join-Path $runtimeDirectory $file) -PathType Leaf)) {
                 throw "Build output is incomplete: $runtimeDirectory/$file"
             }
         }
         if (!$MiKTeXRoot) {
-            $dependencyLine = Get-Content "out/$Preset/CMakeCache.txt" | Where-Object { $_ -match '^LIGHTOVERLEAF_THIRDPARTY_ROOT:PATH=' } | Select-Object -First 1
+            $dependencyLine = Get-Content (Join-Path $repo "out/$Preset/CMakeCache.txt") | Where-Object { $_ -match '^LIGHTOVERLEAF_THIRDPARTY_ROOT:PATH=' } | Select-Object -First 1
             if (!$dependencyLine) { throw 'Cannot resolve LIGHTOVERLEAF_THIRDPARTY_ROOT; specify -MiKTeXRoot.' }
             $MiKTeXRoot = Join-Path ($dependencyLine -replace '^[^=]+=', '') 'miktex'
         }

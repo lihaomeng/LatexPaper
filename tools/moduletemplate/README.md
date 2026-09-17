@@ -11,7 +11,7 @@ M0 的可编译模板位于 `backend/latexlocalservice/workspace/document/`（Sy
 | Outbound | `lol_<module>_outbound` / INTERFACE | `lol_kernel` |
 | App | `lol_<module>_app` / STATIC | 自己的前三个 Target |
 
-每个 Target 使用 `lol_register(target layer module)`，根 CMakeLists 显式添加模块。
+每个 Target 使用 `lol_register(target layer module)`，backend/latexlocalservice/CMakeLists.txt 显式添加模块。
 纯抽象接口使用 IK 前缀，类型使用 K 前缀，文件名全小写且无分隔符。
 端口公开头文件仅放在各自 include 根；App 的实现不对外公开。
 存在实际需求后再创建 Adapter 和 Fake，不预先声明尚未确定的业务接口。

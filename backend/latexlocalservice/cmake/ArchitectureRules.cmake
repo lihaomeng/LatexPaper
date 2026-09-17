@@ -18,8 +18,8 @@ function(lol_check_registration directory)
     foreach(property INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
       get_target_property(paths ${target} ${property})
       foreach(path IN LISTS paths)
-        if(path STREQUAL "${PROJECT_SOURCE_DIR}" OR path STREQUAL "${PROJECT_SOURCE_DIR}/backend"
-          OR path STREQUAL "${PROJECT_SOURCE_DIR}/backend/latexlocalservice"
+        if(path STREQUAL "${PROJECT_SOURCE_DIR}" OR path STREQUAL "${LOL_REPO_ROOT}/backend"
+          OR path STREQUAL "${LOL_REPO_ROOT}"
           OR path MATCHES "/backend/latexlocalservice/(app|texengine|workspace|persistence|transport)$")
           message(FATAL_ERROR "Broad include root forbidden: ${target} -> ${path}")
         endif()
@@ -59,7 +59,7 @@ function(lol_export_architecture)
   string(JOIN ",\n" json ${records})
   file(WRITE "${CMAKE_BINARY_DIR}/architecture.json" "[${json}]")
   execute_process(COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/architecture/check.py"
-    --graph "${CMAKE_BINARY_DIR}/architecture.json" --source "${PROJECT_SOURCE_DIR}"
+    --graph "${CMAKE_BINARY_DIR}/architecture.json" --source "${LOL_REPO_ROOT}"
     COMMAND_ERROR_IS_FATAL ANY)
 endfunction()
 

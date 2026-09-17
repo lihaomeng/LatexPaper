@@ -7,10 +7,12 @@ param(
 $ErrorActionPreference = 'Stop'
 if (!$Dev) { throw 'Use scripts/build.ps1 --dev for the Electron development build.' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-Push-Location $repo
+. (Join-Path $PSScriptRoot 'cmakecontext.ps1')
+Push-Location (Join-Path $repo 'backend/latexlocalservice')
 try {
     $configureArguments = @('--preset', 'electron-dev')
-    if ($FreshConfigure) { $configureArguments += '--fresh' }
+    $configureArguments += Get-CMakeRefreshArguments -Repo $repo -Preset 'electron-dev' -Fresh:$FreshConfigure
+    $configureArguments += @('-DBUILD_TESTING=OFF', '-DLIGHTOVERLEAF_DEV_BUILD=ON', '-DLIGHTOVERLEAF_BUILD_DESKTOP=OFF', '-DLIGHTOVERLEAF_BUILD_ELECTRON=ON')
     & cmake @configureArguments
     if ($LASTEXITCODE -ne 0) { throw 'Backend configure failed.' }
     & cmake --build --preset electron-dev
@@ -47,7 +49,7 @@ try {
     New-Item -ItemType Directory -Force $webTarget | Out-Null
     Copy-Item -Path (Join-Path $repo 'frontend/web/dist/*') -Destination $webTarget -Recurse -Force
     if (!$MiKTeXRoot) {
-        $dependencyLine = Get-Content 'out/electron-dev/CMakeCache.txt' |
+        $dependencyLine = Get-Content (Join-Path $repo 'out/electron-dev/CMakeCache.txt') |
             Where-Object { $_ -match '^LIGHTOVERLEAF_THIRDPARTY_ROOT:PATH=' } | Select-Object -First 1
         if (!$dependencyLine) { throw 'Cannot resolve native dependency root.' }
         $MiKTeXRoot = Join-Path ($dependencyLine -replace '^[^=]+=', '') 'miktex'

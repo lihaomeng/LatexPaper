@@ -1,3 +1,11 @@
+cmake_minimum_required(VERSION 3.21)
+project(LightOverLeaf VERSION 0.1.0 LANGUAGES CXX)
+get_filename_component(LOL_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+include(CTest)
+include(cmake/ProjectOptions.cmake)
+include(cmake/ArchitectureRules.cmake)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include(cmake/Contracts.cmake)
 # Local LaTeX service; dependency edges remain enforced by target metadata.
 add_subdirectory(app/kernel)
 add_subdirectory(app/system)
@@ -33,3 +41,5 @@ endif()
 if(BUILD_TESTING)
   add_subdirectory(app/tests)
 endif()
+
+lol_export_architecture()

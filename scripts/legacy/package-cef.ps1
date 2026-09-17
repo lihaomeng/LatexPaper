@@ -41,7 +41,7 @@ function Require-GuiSubsystem([string]$Path) {
     } finally { $reader.Dispose(); $stream.Dispose() }
 }
 
-Push-Location $repo
+Push-Location (Join-Path $repo 'backend/latexlocalservice')
 try {
     $MiKTeXRoot = [IO.Path]::GetFullPath($MiKTeXRoot)
     Require-Directory $MiKTeXRoot
@@ -51,7 +51,10 @@ try {
     }
     Require-File (Join-Path $MiKTeXRoot 'lightoverleaf-miktex-runtime.json')
     if (!$SkipBuild) {
-        Invoke-Checked 'cmake' @('--preset', 'desktop-release')
+        . (Join-Path $PSScriptRoot '../internal/cmakecontext.ps1')
+        $configureArguments = @('--preset', 'desktop-release')
+        $configureArguments += Get-CMakeRefreshArguments -Repo $repo -Preset 'desktop-release'
+        Invoke-Checked 'cmake' $configureArguments
         Invoke-Checked 'cmake' @('--build', '--preset', 'desktop-release')
     }
     Invoke-Checked 'ctest' @('--preset', 'desktop-release', '--output-on-failure')

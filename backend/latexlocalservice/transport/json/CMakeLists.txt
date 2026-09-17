@@ -1,4 +1,4 @@
-set(LOL_JSON_ROOT "${PROJECT_SOURCE_DIR}/out/dependencies")
+set(LOL_JSON_ROOT "${LOL_REPO_ROOT}/out/dependencies")
 set(LOL_JSON_HEADER "${LOL_JSON_ROOT}/nlohmann/json.hpp")
 set(LOL_JSON_SHA256 "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63")
 if(NOT EXISTS "${LOL_JSON_HEADER}")

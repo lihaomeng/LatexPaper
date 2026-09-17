@@ -10,5 +10,7 @@
 
 业务模块内部维持 domain/application/adapters 分层，目录分组不会授权新的跨模块依赖。
 共享协议定义和夹具留在根目录 contracts/ 与 tests/fixtures/。
-根目录 CMakeLists.txt 负责工程配置，本目录 CMakeLists.txt 负责原生模块装配。
+本目录 CMakeLists.txt 是原生工程入口，同时负责配置与模块装配；CMakePresets.json、cmake/ 构建辅助文件和 tools/architecture/ 架构检查工具也集中在这里。
+CMake 的 PROJECT_SOURCE_DIR 指向本目录，LOL_REPO_ROOT 指向仓库根目录，用于访问共享协议、前端、脚本和夹具。
+直接运行 CMake 预设时需先进入本目录；常用构建脚本会自动切换目录。
 从项目根目录使用 scripts/build.ps1 --dev 构建；入口产物仍为 out/electron-dev/bin/Release/LightOverLeaf.exe。
