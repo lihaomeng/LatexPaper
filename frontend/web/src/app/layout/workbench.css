@@ -84,3 +84,10 @@
   .console-heading .tool-button { margin-left: auto; }
 }
 @media (max-height: 650px) { .build-console { flex-basis: 160px; } }
+
+.console-tabs { display: flex; gap: 4px; align-self: stretch; }
+.console-tabs button { padding: 0 10px; border-bottom: 2px solid transparent; }
+.console-tabs button[aria-pressed=true] { border-color: var(--accent); color: var(--text-primary); }
+.console-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 6px 14px; font-size: 12px; color: var(--text-secondary); }
+.console-filters select { padding: 3px 6px; }
+.outline-filter { width: calc(100% - 12px); margin: 4px 6px 8px; padding: 6px 8px; }

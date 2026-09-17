@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { monaco } from "./monaco";
 import { EditorSession } from "./EditorSession";
-export interface EditorCommands { run(command: "undo" | "redo" | "find" | "bold" | "italic"): void; reveal(line: number, column?: number): void }
+export type EditorCommand = "undo" | "redo" | "find" | "bold" | "italic" | "section" | "subsection" | "equation" | "itemize" | "enumerate" | "table" | "reference";
+export interface EditorCommands { run(command: EditorCommand): void; reveal(line: number, column?: number): void }
 export const EditorSurface = forwardRef<EditorCommands, { session: EditorSession; wrap: boolean; readOnly?: boolean; onReady(): void }>(
   function EditorSurface({ session, wrap, readOnly = false, onReady }, ref) {
     const host = useRef<HTMLDivElement>(null);
@@ -18,6 +19,21 @@ export const EditorSurface = forwardRef<EditorCommands, { session: EditorSession
           const text = editor.getModel()!.getValueInRange(selection);
           editor.pushUndoStop();
           editor.executeEdits("toolbar", [{ range: selection, text: "\\" + (command === "bold" ? "textbf" : "textit") + "{" + (text || "文字") + "}" }]);
+          editor.pushUndoStop();
+        } else if (["section", "subsection", "equation", "itemize", "enumerate", "table", "reference"].includes(command)) {
+          const selection = editor.getSelection()!;
+          const selected = editor.getModel()!.getValueInRange(selection);
+          const templates: Record<string, string> = {
+            section: "\\section{" + (selected || "章节标题") + "}",
+            subsection: "\\subsection{" + (selected || "小节标题") + "}",
+            equation: "\\begin{equation}\n" + (selected || "E = mc^2") + "\n\\end{equation}",
+            itemize: "\\begin{itemize}\n  \\item " + (selected || "列表内容") + "\n\\end{itemize}",
+            enumerate: "\\begin{enumerate}\n  \\item " + (selected || "列表内容") + "\n\\end{enumerate}",
+            table: "\\begin{tabular}{ll}\n  列一 & 列二 \\\\ \n  内容 & 内容\n\\end{tabular}",
+            reference: "\\ref{" + (selected || "标签名称") + "}",
+          };
+          editor.pushUndoStop();
+          editor.executeEdits("insert-template", [{ range: selection, text: templates[command] }]);
           editor.pushUndoStop();
         } else editor.trigger("toolbar", command === "find" ? "actions.find" : command, null);
       },

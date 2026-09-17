@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Icon } from "../../shared/Icon";
 import { previewPresentation } from "./presentation";
 import type { BuildView } from "./model";
@@ -5,18 +6,30 @@ import type { BuildView } from "./model";
 export function BuildLogPanel({ build, open, onClose, onDiagnostic }: {
   build: BuildView; open: boolean; onClose(): void; onDiagnostic(fileId: string, line: number): void;
 }) {
+  const [tab, setTab] = useState<"problems" | "output">("problems");
+  const [filter, setFilter] = useState("all");
   if (!open) return null;
+  const diagnostics = build.diagnostics.filter(item => filter === "all" ||
+    (filter === "error" ? item.severity !== "warning" && item.severity !== "info" : item.severity === filter));
   const errors = build.diagnostics.filter(item => item.severity !== "info" && item.severity !== "warning").length;
   const warnings = build.diagnostics.filter(item => item.severity === "warning").length;
   return <section className="build-console" aria-label="编译日志与诊断">
-    <header className="console-heading"><Icon name="terminal" size={15} /><strong>编译日志</strong>
+    <header className="console-heading"><Icon name="terminal" size={15} /><div className="console-tabs" aria-label="诊断视图">
+        <button aria-pressed={tab === "problems"} onClick={() => setTab("problems")}>问题</button>
+        <button aria-pressed={tab === "output"} onClick={() => setTab("output")}>原始日志</button>
+      </div>
       {errors > 0 && <span className="diagnostic-count error">{errors} 条错误</span>}
       {warnings > 0 && <span className="diagnostic-count">{warnings} 条警告</span>}
       <span className="console-summary">{previewPresentation(build.state).summary}</span>
       <button className="tool-button" onClick={onClose} title="收起日志" aria-label="收起日志"><Icon name="close" size={14} /></button>
     </header>
+    {tab === "problems" && <div className="console-filters">
+      <label>显示 <select aria-label="诊断级别" value={filter} onChange={event => setFilter(event.target.value)}>
+        <option value="all">全部</option><option value="error">错误</option><option value="warning">警告</option><option value="info">提示</option>
+      </select></label><span>点击带行号的问题，跳转到源码</span>
+    </div>}
     <div className="build-log">
-      {build.diagnostics.map((item, index) => {
+      {tab === "problems" && diagnostics.map((item, index) => {
         const message = item.message === "No citations requested; the bibliography is intentionally empty."
           ? "正文尚未引用文献，参考文献列表暂为空（仅显示已引用条目）。" : item.message;
         return item.line > 0 ? <button className={"diagnostic-row " + (item.severity ?? "error")}
@@ -24,7 +37,8 @@ export function BuildLogPanel({ build, open, onClose, onDiagnostic }: {
           <span>{item.fileId}:{item.line}</span> {message}</button>
           : <p className="diagnostic-message" key={index}>{message}</p>;
       })}
-      <pre>{build.output || "暂无编译输出。点击「编译」后，日志会显示在这里。"}</pre>
+      {tab === "problems" && !diagnostics.length && <p className="muted">{build.diagnostics.length ? "没有匹配的问题。" : "暂无结构化问题；编译失败时可切换原始日志查看原因。"}</p>}
+      {tab === "output" && <pre>{build.output || "暂无编译输出。点击「编译」后，日志会显示在这里。"}</pre>}
       <details className="build-details"><summary>任务详情</summary>
         <p>Generation：{build.generation ?? "—"} · 阶段：{build.phase ?? "—"}</p>
       </details>

@@ -96,7 +96,6 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   const [modal, setModal] = useState<"new" | "help" | "settings" | "conflict" | "manage" | "directory" | "trash" | null>(null);
   const [filename, setFilename] = useState("");
   const [fileError, setFileError] = useState("");
-  const [outlineLine, setOutlineLine] = useState<number | null>(null);
   const search = useRef<HTMLInputElement>(null);
   const activeStatus = conflictFile ? "error" : localSession ? localStatus : status;
   const activeError = conflictFile ? `${conflictFile} 已被外部修改，自动保存已暂停。请对比版本后处理。` : localError || (localSession ? "" : error);
@@ -124,7 +123,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       });
       resetProjectSearch();
       setBuildView({ state: "idle", output: "", diagnostics: [] });
-      setPdfTarget(null); setSelectedDirectory(null); setOutlineLine(null);
+      setPdfTarget(null); setSelectedDirectory(null);
     },
   });
   useEffect(() => {
@@ -254,8 +253,8 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     } finally { setWorkspaceBusy(false); }
   };  const openLocalFile = async (path: string) => {
     if (workspaceBusy) return;
-    if (!localSession) { session.activate(path); setOutlineLine(null); return; }
-    if (localSession.model(path)) { localSession.activate(path); setOutlineLine(null); return; }
+    if (!localSession) { session.activate(path); return; }
+    if (localSession.model(path)) { localSession.activate(path); return; }
     const sequence = ++documentOpenSequence.current;
     try {
       const document = await workspaceConnection.openDocument(path);
@@ -263,7 +262,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       localSession.load(document.fileId, document.content);
       revisions.current.set(document.fileId, document.revision);
       setLocalStatus(localSession.getView().files.some(file => file.dirty) ? "pending" : "saved");
-      setLocalError(""); setOutlineLine(null);
+      setLocalError("");
     } catch (failure) {
       if (localSessionRef.current !== localSession || sequence !== documentOpenSequence.current) return;
       setLocalStatus("error"); setLocalError("打开文件失败：" + (failure as Error).message);
@@ -272,7 +271,6 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   const openSearchHit = async (fileId: string, line: number) => {
     await openLocalFile(fileId);
     if (localSessionRef.current === localSession) {
-      setOutlineLine(line);
       editor.current?.reveal(line);
     }
   };
@@ -551,8 +549,8 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
           onRename={localSession ? path => startFileOperation("rename", path) : undefined}
           onRemove={localSession ? path => startFileOperation("remove", path) : undefined}
           operationsDisabled={workspaceBusy} onOpen={path => { void openLocalFile(path); if (layout.drawer) setSidebar(false); }} />
-        <OutlinePanel key={view.active} entries={view.outline} activeLine={outlineLine}
-          onSelect={line => { setOutlineLine(line); editor.current?.reveal(line); if (layout.drawer) setSidebar(false); }} />
+        <OutlinePanel key={view.active} entries={view.outline} activeLine={view.line}
+          onSelect={line => { editor.current?.reveal(line); if (layout.drawer) setSidebar(false); }} />
       </aside>{!layout.drawer && <Splitter label="调整侧栏宽度" min={220} max={380}
         value={sidebarWidth} onChange={setSidebarWidth} />}</>}
       <div className="work-area"><div className="document-panes">
@@ -571,6 +569,12 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
           <span className="toolbar-divider" />
           <button className="text-tool" title="插入粗体命令" aria-label="插入粗体" disabled={!view.active} onClick={() => editor.current?.run("bold")}><b>B</b></button>
           <button className="text-tool" title="插入斜体命令" aria-label="插入斜体" disabled={!view.active} onClick={() => editor.current?.run("italic")}><i>I</i></button>
+          <ActionMenu title="插入 LaTeX 结构" label={<>插入 <span className="menu-chevron">⌄</span></>}>
+            {([["section", "章节"], ["subsection", "小节"], ["equation", "编号公式"],
+              ["itemize", "无序列表"], ["enumerate", "有序列表"], ["table", "两列表格"],
+              ["reference", "交叉引用"]] as const).map(([command, label]) =>
+                <button key={command} disabled={!view.active || workspaceBusy} onClick={() => editor.current?.run(command)}>{label}</button>)}
+          </ActionMenu>
           <Tool icon="wrap" label="自动换行" pressed={wrap} onClick={() => setWrap(!wrap)} />
           <div className="editor-path" title={view.active ?? "未打开文件"}>{view.active ?? "未打开文件"}</div>
           <Tool icon="pdf" label="定位到 PDF" disabled={!buildView.artifactId || !buildView.syncTexAvailable || !view.active}
