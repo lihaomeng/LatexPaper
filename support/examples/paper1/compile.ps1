@@ -1,11 +1,11 @@
-param([string]$RuntimeRoot = (Join-Path $PSScriptRoot '../out/desktop-release/bin/Release/runtime/miktex'))
+param([string]$RuntimeRoot = (Join-Path $PSScriptRoot '../../../out/electron-dev/bin/Release/runtime/miktex'))
 $ErrorActionPreference = 'Stop'
 $bin = Join-Path ([IO.Path]::GetFullPath($RuntimeRoot)) 'texmfs/install/miktex/bin/x64'
 foreach ($tool in @('pdflatex.exe','bibtex.exe')) {
     if (!(Test-Path -LiteralPath (Join-Path $bin $tool))) { throw "Missing $tool in $bin" }
 }
 # Work on a private copy, keeping intermediate files out of the source project.
-$output = Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../out'))) ('paper1-' + [guid]::NewGuid().ToString('N'))
+$output = Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../out'))) ('paper1-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $output | Out-Null
 foreach ($entry in @('main.tex','references.bib','sections','data','figures')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $entry) -Destination $output -Recurse

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA = ROOT / 'contracts/rpc/v1/envelope.schema.json'
+SCHEMA = ROOT / 'support/contracts/rpc/v1/envelope.schema.json'
 ALLOWED = {'$schema', '$id', 'title', 'type', 'const', 'required', 'properties',
            'additionalProperties', 'minimum', 'maximum', 'minLength', 'maxLength', 'pattern'}
 
@@ -102,7 +102,7 @@ def generate_cpp(schema):
         functions.append('\n'.join(body))
         return name
     entry = emit(schema)
-    return '''// Generated from contracts/rpc/v1/envelope.schema.json. Do not edit.
+    return '''// Generated from support/contracts/rpc/v1/envelope.schema.json. Do not edit.
 #pragma once
 #include <cmath>
 #include <cstdint>

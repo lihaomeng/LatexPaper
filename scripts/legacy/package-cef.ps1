@@ -90,7 +90,7 @@ try {
     $sqliteLicense = Join-Path $repo '..\QTBest\thirdparty_install\vcpkg\installed\x64-windows\share\sqlite3\copyright'
     Require-File $sqliteLicense
     Copy-Item -LiteralPath $sqliteLicense -Destination (Join-Path $licenses 'sqlite3.txt') -Force
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../resources/packaging/README.txt') `
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../support/resources/packaging/README.txt') `
         -Destination (Join-Path $distribution 'README.txt') -Force
     foreach ($forbidden in @('payload.7z', 'payload.zip', 'LightOverLeafRuntimeLauncher.exe')) {
         if (Test-Path -LiteralPath (Join-Path $distribution $forbidden)) {

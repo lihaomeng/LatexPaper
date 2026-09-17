@@ -24,7 +24,7 @@ foreach ($file in @('ctexart.cls','CJKutf8.sty','CJKpunct.sty','zhnumber.sty','c
 }
 $configuration = Join-Path $Root 'texmfs/config/tex/latex/lightoverleaf'
 New-Item -ItemType Directory -Path $configuration -Force | Out-Null
-$resources = Join-Path $PSScriptRoot '../../resources/tex'
+$resources = Join-Path $PSScriptRoot '../../support/resources/tex'
 foreach ($file in @('ctexopts.cfg','ctex-fontset-lightoverleaf.def')) {
     Copy-Item -LiteralPath (Join-Path $resources $file) -Destination (Join-Path $configuration $file) -Force
 }

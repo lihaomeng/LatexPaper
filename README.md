@@ -28,7 +28,7 @@ out/electron-dev/bin/Release/LightOverLeaf.exe
 - `frontend/web/src/`：React/TypeScript、Monaco、PDF.js 与 NativeApi。
 - `backend/latexlocalservice/`：按 texengine、workspace、persistence、transport、app 分组；业务模块内部保留 Domain、Application、Ports 与 Adapters 分层。
 - `backend/latexlocalservice/transport/json/`：不依赖 Qt/CEF 的 JSON 传输适配。
-- `contracts/rpc/`：前后端共用 RPC 契约。
+- `support/contracts/rpc/`：前后端共用 RPC 契约。
 - `scripts/`：开发命令入口；`tools/`：契约生成和架构检查实现。
 
 界面通过 `window.lightoverleaf` 的窄接口发送 RPC。Electron 校验来源和契约，使用私有 stdio 管道连接后端，不开本地 HTTP 端口。原生选择的绝对路径只存在于主进程与后端之间，不由 Renderer 提供。
@@ -49,4 +49,8 @@ Electron 本轮记录见 [迁移记录](docs/acceptance/electron-migration.md)�
 
 C++ 工程入口、预设与构建辅助文件集中在 `backend/latexlocalservice/`：`CMakeLists.txt`、`CMakePresets.json`、`cmake/` 和 `tools/architecture/`。
 日常仍从仓库根目录执行 `./scripts/build.ps1 --dev`；脚本自动进入服务目录，并在源码入口变更时刷新旧 CMake 缓存。产物仍写入根目录 `out/`。
-共享的 `contracts/`、`tests/fixtures/` 和跨前后端构建脚本保留在根目录。
+共享协议位于 `support/contracts/`；`tests/fixtures/` 和跨前后端构建脚本仍保留在根目录。
+
+## 配套内容
+
+项目配套文件统一位于 [support](support/README.md)：`contracts/` 共享协议、`examples/paper1/` 示例论文、`patches/` 第三方补丁、`resources/` TeX 与打包资源。

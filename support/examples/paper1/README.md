@@ -13,14 +13,14 @@
 
 ## 复算与独立验证
 
-在 PowerShell 中执行：
+在仓库根目录的 PowerShell 中执行：
 
 ```powershell
-.\paper1\generate-data.ps1
-.\paper1\compile.ps1
+.\support\examples\paper1\generate-data.ps1
+.\support\examples\paper1\compile.ps1
 ```
 
-生成脚本仅使用 Windows PowerShell/.NET 的数学与绘图能力；重新生成会覆盖本目录 data 与 figures 中的生成文件，不覆盖手写正文。编译脚本使用应用自带 Runtime，将输入复制到仓库 out 下的唯一目录后编译，不污染论文源码；成功时打印 PDF 位置。运行时禁用自动安装和 Shell Escape。
+生成脚本仅使用 Windows PowerShell/.NET 的数学与绘图能力；重新生成会覆盖本目录 data 与 figures 中的生成文件，不覆盖手写正文。编译脚本默认使用 out/electron-dev/bin/Release/runtime/miktex，可通过 -RuntimeRoot 指定其他 Runtime；脚本，将输入复制到仓库 out 下的唯一目录后编译，不污染论文源码；成功时打印 PDF 位置。运行时禁用自动安装和 Shell Escape。
 
 ## 数据约定
 

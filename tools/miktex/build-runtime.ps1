@@ -181,11 +181,11 @@ function Apply-SourcePatch([string]$PatchPath, [string]$SentinelFile, [string]$S
 }
 
 Apply-SourcePatch `
-    (Join-Path $repo 'patches/miktex/26.5-windows-shlwapi-declarations.patch') `
+    (Join-Path $repo 'support/patches/miktex/26.5-windows-shlwapi-declarations.patch') `
     (Join-Path $sourceRoot 'Libraries/MiKTeX/Core/win/winRegistry.cpp') `
     '#include <Shlwapi.h>'
 Apply-SourcePatch `
-    (Join-Path $repo 'patches/miktex/26.5-cairo-configurable-dwrite.patch') `
+    (Join-Path $repo 'support/patches/miktex/26.5-cairo-configurable-dwrite.patch') `
     (Join-Path $sourceRoot 'Libraries/3rd/cairo/CMakeLists.txt') `
     'option(MIKTEX_CAIRO_DWRITE'
 

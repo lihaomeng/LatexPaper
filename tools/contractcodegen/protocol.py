@@ -6,7 +6,7 @@ from pathlib import Path
 def generate_protocol(root, cpp_out, write, check):
     definitions = {}
     expected_root = {'$schema', '$id', '$defs', 'oneOf'}
-    for schema_path in sorted((root / 'contracts/rpc/v2').glob('*.schema.json')):
+    for schema_path in sorted((root / 'support/contracts/rpc/v2').glob('*.schema.json')):
         schema = json.loads(schema_path.read_text(encoding='utf-8'))
         local = schema['$defs']
         if set(schema) != expected_root or schema['oneOf'] != [{'$ref': '#/$defs/' + name} for name in local]:

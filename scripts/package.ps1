@@ -53,7 +53,7 @@ foreach ($package in $licenseSources.Keys) {
 Copy-Item -LiteralPath $sqliteLicense -Destination (Join-Path $licenses 'sqlite3.txt')
 Copy-Item -LiteralPath (Join-Path $source 'LICENSE') -Destination (Join-Path $licenses 'Electron.txt')
 Copy-Item -LiteralPath (Join-Path $source 'LICENSES.chromium.html') -Destination $licenses
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../resources/packaging/README.txt') -Destination (Join-Path $distribution 'README.txt')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../support/resources/packaging/README.txt') -Destination (Join-Path $distribution 'README.txt')
 $entries = @(Get-ChildItem -LiteralPath $distribution -Recurse -File | Sort-Object FullName | ForEach-Object {
     [pscustomobject][ordered]@{
         path = $_.FullName.Substring($distribution.Length + 1).Replace('\', '/')
