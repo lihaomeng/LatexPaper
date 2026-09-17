@@ -50,7 +50,7 @@ ctest --preset desktop-release
 - out/workbench-unit-tests.log
 - out/workbench-debug-build.log、out/workbench-release-build.log
 - out/workbench-edit-snapshot.txt、out/workbench-restored-document.txt
-- output/playwright/workbench-strict-csp.png
+- out/verification/playwright/workbench-strict-csp.png
 - 各构建目录的 Testing/Temporary/LastTest.log
 
 ## 修复前阻塞与后续（历史记录）
@@ -79,7 +79,7 @@ ctest --preset desktop-release
 | 700×800 实际截图 | 预览按窄窗口规则隐藏，编辑区、文件树和大纲无重叠 |
 | 控制台 | 初次加载仅 favicon.ico 404；重载后 0 errors、0 warnings，无此前 CSP 样式报错 |
 
-证据：`output/playwright/workbench-csp-fixed.png`、`output/playwright/workbench-csp-narrow.png`；重载快照 `.playwright-cli/page-2026-09-11T12-06-54-407Z.yml`；双配置 `Testing/Temporary/LastTest.log`。截图已实际查看，不仅检查文件存在。
+证据：`out/verification/playwright/workbench-csp-fixed.png`、`out/verification/playwright/workbench-csp-narrow.png`；重载快照 `.playwright-cli/page-2026-09-11T12-06-54-407Z.yml`；双配置 `Testing/Temporary/LastTest.log`。截图已实际查看，不仅检查文件存在。
 
 本次为增量构建，未声称全新 Configure。仍存在第三方 CEF 未使用参数警告、Vite 大体积 chunk 提示及依赖弃用提示；未升级依赖。首次批量浏览器脚本因命令行转义报 SyntaxError，改用显式 CLI 操作后完成验证，未作为应用缺陷计入。
 

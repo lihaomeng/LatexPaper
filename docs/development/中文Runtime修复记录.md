@@ -6,7 +6,7 @@
 
 `ctexart.cls not found` 表明 pdfLaTeX 已启动，但发行包缺少 CTEX 文档类。只复制编译器或者生成 pdflatex.fmt 不足以支持中文。补齐后又实际检测到缺少 zhnumber，已一并处理。
 
-- 新增 `scripts/prepare-chinese-runtime.ps1`，显式准备 ctex、cjk、arphic、cjkpunct、zhmetrics、zhnumber。
+- 新增 `scripts/runtime/prepare-chinese-runtime.ps1`，显式准备 ctex、cjk、arphic、cjkpunct、zhmetrics、zhnumber。
 - 只有指定 `-AllowDownload` 的依赖准备阶段允许下载；部署、普通开发构建和应用内编译不会下载宏包。
 - Runtime 源码构建的宏包安装阶段接入中文准备；跳过宏包安装时仍跳过该步骤。
 - 开发部署与 Full 目录打包均刷新文件数据库、字体映射，并使用内置 pdfLaTeX 离线编译受控的中文文档；失败则终止并保留日志。
@@ -18,7 +18,7 @@
 仅在首次配置或补齐专用源 Runtime 时显式运行（此命令联网安装宏包）：
 
 ```powershell
-.\scripts\prepare-chinese-runtime.ps1 -Root 'D:\CodeMyself\QTBest\thirdparty_install\miktex' -AllowDownload
+.\scripts\runtime\prepare-chinese-runtime.ps1 -Root 'D:\CodeMyself\QTBest\thirdparty_install\miktex' -AllowDownload
 ```
 
 日常编译、部署可运行：

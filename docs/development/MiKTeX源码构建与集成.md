@@ -62,7 +62,7 @@ D:\CodeMyself\QTBest\thirdparty_install\vcpkg\vcpkg.exe install boost-locale:x64
 ```powershell
 cd D:\CodeMyself\LightOverLeaf
 $env:LIGHTOVERLEAF_THIRDPARTY_ROOT = 'D:\CodeMyself\QTBest\thirdparty_install'
-.\scripts\build-miktex-runtime.ps1
+.\tools\miktex\build-runtime.ps1
 ```
 
 脚本依次执行：校验工具、下载固定源码、校验 SHA-256、CMake 配置、Release 构建、隔离安装、显式准备 Basic 宏包、恢复源码构建的二进制、关闭自动安装并写入来源清单。
@@ -71,13 +71,13 @@ $env:LIGHTOVERLEAF_THIRDPARTY_ROOT = 'D:\CodeMyself\QTBest\thirdparty_install'
 
 ```powershell
 # 只验证依赖和 CMake 配置
-.\scripts\build-miktex-runtime.ps1 -ConfigureOnly -SkipDownload
+.\tools\miktex\build-runtime.ps1 -ConfigureOnly -SkipDownload
 
 # 只构建可执行层，暂不下载宏包集合
-.\scripts\build-miktex-runtime.ps1 -SkipPackageProvision
+.\tools\miktex\build-runtime.ps1 -SkipPackageProvision
 
 # 完整宏包集合；体积和耗时显著增加
-.\scripts\build-miktex-runtime.ps1 -PackageSet complete
+.\tools\miktex\build-runtime.ps1 -PackageSet complete
 ```
 
 成功后至少应存在：

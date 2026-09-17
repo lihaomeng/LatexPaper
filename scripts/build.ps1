@@ -13,12 +13,11 @@ foreach ($argument in $args) {
 }
 if ($Dev -and -not $PSBoundParameters.ContainsKey('Preset')) { $Preset = 'electron-dev' }
 if ($Preset -eq 'electron-dev') {
-    & (Join-Path $PSScriptRoot 'build-electron.ps1') -Dev:$Dev -MiKTeXRoot $MiKTeXRoot -RefreshRuntime:$RefreshRuntime -FreshConfigure:$FreshConfigure
+    & (Join-Path $PSScriptRoot 'internal/build-electron.ps1') -Dev:$Dev -MiKTeXRoot $MiKTeXRoot -RefreshRuntime:$RefreshRuntime -FreshConfigure:$FreshConfigure
     return
 }
 Push-Location (Join-Path $PSScriptRoot '..')
 try {
-    if ($Dev -and -not $PSBoundParameters.ContainsKey('Preset')) { $Preset = 'desktop-release' }
     $testing = if ($Dev) { 'OFF' } else { 'ON' }
     $devMode = if ($Dev) { 'ON' } else { 'OFF' }
     $configureArguments = @('--preset', $Preset, "-DBUILD_TESTING=$testing", "-DLIGHTOVERLEAF_DEV_BUILD=$devMode")
@@ -44,9 +43,9 @@ try {
             $MiKTeXRoot = Join-Path ($dependencyLine -replace '^[^=]+=', '') 'miktex'
         }
         if ($Dev) {
-            & (Join-Path $PSScriptRoot 'ensure-dev-runtime.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtimeDirectory 'runtime/miktex') -Refresh:$RefreshRuntime
+            & (Join-Path $PSScriptRoot 'runtime/ensure-dev-runtime.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtimeDirectory 'runtime/miktex') -Refresh:$RefreshRuntime
         } else {
-            & (Join-Path $PSScriptRoot 'deploy-miktex.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtimeDirectory 'runtime/miktex')
+            & (Join-Path $PSScriptRoot 'runtime/deploy-miktex.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtimeDirectory 'runtime/miktex')
         }
         $application = Join-Path $runtimeDirectory 'LightOverLeaf.exe'
         Write-Host ''

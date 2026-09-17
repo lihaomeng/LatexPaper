@@ -18,7 +18,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 if ([string]::IsNullOrWhiteSpace($DependencyRoot)) {
     $DependencyRoot = if (![string]::IsNullOrWhiteSpace($env:LIGHTOVERLEAF_THIRDPARTY_ROOT)) {
         $env:LIGHTOVERLEAF_THIRDPARTY_ROOT
@@ -277,7 +277,7 @@ if (Test-Path -LiteralPath $initexmf -PathType Leaf) {
 }
 
 if (!$SkipPackageProvision -and $PackageSet -ne 'none') {
-    & (Join-Path $PSScriptRoot 'prepare-chinese-runtime.ps1') -Root $InstallRoot -AllowDownload
+    & (Join-Path $PSScriptRoot '../../scripts/runtime/prepare-chinese-runtime.ps1') -Root $InstallRoot -AllowDownload
 }
 
 $provenance = [ordered]@{

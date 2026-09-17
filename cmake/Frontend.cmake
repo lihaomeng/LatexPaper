@@ -7,7 +7,7 @@ else()
 endif()
 add_custom_target(lol_frontend
   COMMAND "${POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
-    -File "${PROJECT_SOURCE_DIR}/scripts/build-frontend.ps1" -Mode ${_lol_frontend_command}
+    -File "${PROJECT_SOURCE_DIR}/scripts/internal/build-frontend.ps1" -Mode ${_lol_frontend_command}
   WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/web"
   COMMENT "Frontend: ${_lol_frontend_command} dependency preparation and build"
   VERBATIM)

@@ -6,7 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 
 function Invoke-Checked([string]$Program, [string[]]$Arguments) {
     & $Program @Arguments
@@ -75,8 +75,8 @@ try {
     $runtimeRoot = Join-Path $distribution 'runtime'
     New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
     Copy-Item -LiteralPath $MiKTeXRoot -Destination (Join-Path $runtimeRoot 'miktex') -Recurse
-    & (Join-Path $PSScriptRoot 'prepare-chinese-runtime.ps1') -Root (Join-Path $runtimeRoot 'miktex')
-    & (Join-Path $PSScriptRoot 'initialize-pdflatex.ps1') -Root (Join-Path $runtimeRoot 'miktex')
+    & (Join-Path $PSScriptRoot '../runtime/prepare-chinese-runtime.ps1') -Root (Join-Path $runtimeRoot 'miktex')
+    & (Join-Path $PSScriptRoot '../runtime/initialize-pdflatex.ps1') -Root (Join-Path $runtimeRoot 'miktex')
     $licenses = Join-Path $distribution 'licenses'
     New-Item -ItemType Directory -Path $licenses -Force | Out-Null
     foreach ($package in @('react', 'react-dom', 'scheduler', 'monaco-editor', 'pdfjs-dist')) {
@@ -87,7 +87,7 @@ try {
     $sqliteLicense = Join-Path $repo '..\QTBest\thirdparty_install\vcpkg\installed\x64-windows\share\sqlite3\copyright'
     Require-File $sqliteLicense
     Copy-Item -LiteralPath $sqliteLicense -Destination (Join-Path $licenses 'sqlite3.txt') -Force
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'package-readme.txt') `
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../resources/packaging/README.txt') `
         -Destination (Join-Path $distribution 'README.txt') -Force
     foreach ($forbidden in @('payload.7z', 'payload.zip', 'LightOverLeafRuntimeLauncher.exe')) {
         if (Test-Path -LiteralPath (Join-Path $distribution $forbidden)) {

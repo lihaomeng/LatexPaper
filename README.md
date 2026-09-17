@@ -37,8 +37,10 @@ out/electron-dev/bin/Release/LightOverLeaf.exe
 
 ## 旧版与验证记录
 
-Qt/CEF 源码和 `desktop-debug` / `desktop-release` 预设暂时保留，用于迁移对照。显式旧版开发构建为 `scripts/build.ps1 -Preset desktop-release --dev`；它不再是默认桌面。现有发布脚本和历史 M0–M9 验收记录属于旧版，不能作为 Electron 运行或发布验收证据。
+Qt/CEF 源码和 `desktop-debug` / `desktop-release` 预设暂时保留，用于迁移对照。显式旧版开发构建为 `scripts/build.ps1 -Preset desktop-release --dev`；它不再是默认桌面。默认 `scripts/package.ps1` 已面向 Electron 开发分发；`-LegacyCef` 显式选择旧版。历史 M0–M9 验收记录不能作为 Electron 运行或发布验收证据。
 
 Electron 本轮记录见 [迁移记录](docs/acceptance/electron-migration.md)。业务历史见 [阶段进度](docs/development/阶段进度.md) 与 [开发要求](docs/development/LightOverLeaf_开发要求.md)。
 
 浏览器独立开发仍可在 `web/` 运行 `npm run dev`，仅明确的浏览器开发模式允许 Fake NativeApi；桌面构建通道缺失时报告错误。
+
+脚本职责和迁移路径见 [脚本说明](scripts/README.md)。构建产物集中在 `out/`，浏览器检查产物集中在 `out/verification/`。

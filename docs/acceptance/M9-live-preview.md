@@ -39,10 +39,10 @@
 
 工作目录均为 `D:/CodeMyself/LightOverLeaf`。
 
-1. `scripts/configure.ps1 -Preset desktop-release`：退出码 0；Contract 23 个共享 Fixture、V2 163 个共享 Fixture，架构检查 86 个显式 Target。
+1. `scripts/internal/configure.ps1 -Preset desktop-release`：退出码 0；Contract 23 个共享 Fixture、V2 163 个共享 Fixture，架构检查 86 个显式 Target。
 2. `scripts/build.ps1 -Preset desktop-release`：退出码 0；前端 ESLint、291/291 测试、TypeScript 与 Vite 生产构建通过；完整 C++/Qt/CEF Release 目标通过。
 3. `scripts/test.ps1 -Preset desktop-release`：退出码 0；CTest 33/33，通过 Build、Workspace Workflow RPC、Contract、Architecture、Illegal Dependency、Codegen Drift 与桌面 CEF smoke。
-4. `scripts/package-full.ps1 -SkipBuild -SmokeTimeoutSeconds 180`：退出码 0；再次执行 CTest 33/33，生成展开式 Full 绿色目录，无归档、无 7-Zip、运行时零解压。
+4. `scripts/legacy/package-full.ps1 -SkipBuild -SmokeTimeoutSeconds 180`：退出码 0；再次执行 CTest 33/33，生成展开式 Full 绿色目录，无归档、无 7-Zip、运行时零解压。
 
 本轮新发布证据：
 

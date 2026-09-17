@@ -8,7 +8,7 @@
 - 布局 v2 的唯一读取来源仍为 renderer profile。原生 Session 的旧布局字段仅兼容回传；布局拖动不再触发原生 Session 保存。
 - 清除 code-pill、editor-breadcrumb、preview-tabs、preview-bottom 的未使用样式。
 - 默认 `package.ps1` 面向 Electron + C++ 的已有开发构建；需要构建时仅调用 `build.ps1 --dev`。`-SkipBuild` 打包已有产物。新目录包含完整 runtime、资源、第三方许可证、哈希清单和验证范围报告。
-- 旧打包实现移至 `package-legacy-cef.ps1`，仅显式 `package.ps1 -LegacyCef` 使用。仍保留 Qt/CEF 源码与兼容预设。
+- 旧打包实现移至 `scripts/legacy/package-cef.ps1`，仅显式 `package.ps1 -LegacyCef` 使用。仍保留 Qt/CEF 源码与兼容预设。
 
 ## 验证与限制
 

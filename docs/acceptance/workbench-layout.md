@@ -14,7 +14,7 @@
 
 - 使用 `scripts/build.ps1 --dev` 构建 Electron + C++ 后端，包含 TypeScript 检查。
 - Playwright 浏览器人工检查 1440×900 和 560×760 布局、布局菜单、阅读预设及抽屉侧栏。
-- 截图位于忽略目录 `output/playwright/`。
+- 截图位于忽略目录 `out/verification/playwright/`。
 - 浏览器预览未连接原生后端，因此没有执行真实 TeX 编译、PDF 渲染或 SyncTeX 的端到端验收；未运行测试套件。
 - 浏览器日志仅发现 favicon.ico 缺失的 404。
 

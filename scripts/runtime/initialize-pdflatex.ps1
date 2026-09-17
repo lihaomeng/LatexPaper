@@ -33,7 +33,7 @@ Write-Host "pdfLaTeX format ready: $($format.FullName)"
 # Deployment readiness check: compile a controlled Chinese document offline.
 $checkDirectory = Join-Path $logDirectory ('chinese-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $checkDirectory | Out-Null
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../resources/tex/chinese-check.tex') -Destination (Join-Path $checkDirectory 'main.tex')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../resources/tex/chinese-check.tex') -Destination (Join-Path $checkDirectory 'main.tex')
 $latexArguments = @('--disable-installer','-no-shell-escape','-interaction=nonstopmode','-halt-on-error','-file-line-error','main.tex')
 $stages = @(
     @{Name='latex-1'; Tool='pdflatex.exe'; Arguments=$latexArguments},

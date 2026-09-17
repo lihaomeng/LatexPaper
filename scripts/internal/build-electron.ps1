@@ -6,7 +6,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if (!$Dev) { throw 'Use scripts/build.ps1 --dev for the Electron development build.' }
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 Push-Location $repo
 try {
     $configureArguments = @('--preset', 'electron-dev')
@@ -52,7 +52,7 @@ try {
         if (!$dependencyLine) { throw 'Cannot resolve native dependency root.' }
         $MiKTeXRoot = Join-Path ($dependencyLine -replace '^[^=]+=', '') 'miktex'
     }
-    & (Join-Path $PSScriptRoot 'ensure-dev-runtime.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtime 'runtime/miktex') -Refresh:$RefreshRuntime
+    & (Join-Path $PSScriptRoot '../runtime/ensure-dev-runtime.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtime 'runtime/miktex') -Refresh:$RefreshRuntime
     foreach ($file in @('LightOverLeaf.exe', 'LightOverLeafBackend.exe', 'sqlite3.dll',
         'resources/app/main.js', 'resources/app/preload.js', 'resources/app/web/index.html')) {
         if (!(Test-Path -LiteralPath (Join-Path $runtime $file) -PathType Leaf)) { throw "Missing build output: $file" }
