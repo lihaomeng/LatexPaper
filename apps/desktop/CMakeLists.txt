@@ -10,5 +10,11 @@ target_link_libraries(lol_composition PUBLIC lol_platform_ports
   lol_search_adapter_localfs lol_build_adapter_windows lol_preview_adapter_localfs
   lol_navigation_adapter_unavailable lol_navigation_adapter_windows
   lol_preferences_adapter_sqlite lol_session_adapter_sqlite
-  lol_rpc_core lol_transport_cef lol_platform_worker lol_platform_qt lol_platform_cef lol_platform_windows)
+  lol_rpc_core lol_platform_worker lol_platform_windows)
+if(LIGHTOVERLEAF_BUILD_ELECTRON)
+  target_compile_definitions(lol_composition PRIVATE LOL_ELECTRON_BACKEND NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_link_libraries(lol_composition PRIVATE lol_transport_json)
+else()
+  target_link_libraries(lol_composition PRIVATE lol_transport_cef lol_platform_qt lol_platform_cef)
+endif()
 lol_register(lol_composition composition desktop)

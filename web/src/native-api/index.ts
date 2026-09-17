@@ -1,5 +1,5 @@
 import { validatePing, type PingRequest, type NativeApi } from "../../.generated/rpc/contract";
-export { createSystemConnection, SystemRpcClient, CefSystemTransport, FakeSystemTransport } from './system';
+export { createSystemConnection, SystemRpcClient, BridgeSystemTransport, CefSystemTransport, FakeSystemTransport } from './system';
 export { WorkspaceRpcClient } from './workspace';
 export { AuthoringRpcClient } from './authoring';
 export { ExportRpcClient } from './export';
@@ -18,27 +18,15 @@ export class FakeNativeApi implements NativeApi {
   }
 }
 
-export interface CefQueryOptions {
-  request: string;
-  persistent: boolean;
-  onSuccess(response: string): void;
-  onFailure(code: number, message: string): void;
-}
-export interface CefBridge {
-  query(options: CefQueryOptions): number;
-  cancel(id: number): void;
-}
-declare global {
-  interface Window {
-    cefQuery?: CefBridge["query"];
-    cefQueryCancel?: CefBridge["cancel"];
-  }
-}
+import { getNativeBridge, type NativeBridge } from './bridge';
+export type { NativeBridge, NativeQueryOptions } from './bridge';
+export type { NativeBridge as CefBridge, NativeQueryOptions as CefQueryOptions } from './bridge';
 
-export class CefNativeApi implements NativeApi {
-  private bridge: CefBridge;
+
+export class BridgeNativeApi implements NativeApi {
+  private bridge: NativeBridge;
   private timeoutMs: number;
-  constructor(bridge: CefBridge, timeoutMs = 5000) {
+  constructor(bridge: NativeBridge, timeoutMs = 5000) {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60000) throw new Error("INVALID_TIMEOUT");
     this.bridge = bridge;
     this.timeoutMs = timeoutMs;
@@ -83,13 +71,17 @@ export class CefNativeApi implements NativeApi {
 }
 
 export function createNativeConnection(allowFake: boolean): { api: NativeApi; mode: string } {
-  if (window.cefQuery && window.cefQueryCancel) {
+  const bridge = getNativeBridge();
+  if (bridge) {
     return {
-      api: new CefNativeApi({ query: window.cefQuery.bind(window), cancel: window.cefQueryCancel.bind(window) }),
-      mode: "CEF 原生通信",
+      api: new BridgeNativeApi(bridge),
+      mode: window.lightoverleaf ? "Electron 原生通信" : "CEF 原生通信",
     };
   }
   if (allowFake) return { api: new FakeNativeApi(), mode: "浏览器开发模式 · Fake NativeApi" };
   return { api: { ping: async () => { throw new Error("TRANSPORT_UNAVAILABLE"); } }, mode: "原生通信不可用" };
 }
 
+
+// Source compatibility for the explicit legacy desktop and its existing fixtures.
+export { BridgeNativeApi as CefNativeApi };

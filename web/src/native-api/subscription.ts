@@ -1,8 +1,9 @@
+import { getNativeBridge } from './bridge';
 import { validateConnectedEvent, validateAcceptedEvent, type AcceptedEvent, type RequestEvent } from '../../.generated/rpc/protocol';
 import { RpcEventCursor } from './events';
 import { CancellationRpcClient } from './cancellation';
-import { CefSystemTransport } from './system';
-import type { CefBridge } from './index';
+import { BridgeSystemTransport } from './system';
+import type { NativeBridge } from './bridge';
 
 /** One persistent query, owned by the mounted application, never by a Feature. */
 export class NativeEventSubscription {
@@ -17,11 +18,11 @@ export class NativeEventSubscription {
   private acceptedGeneration = 0;
   private eventSequence = 0;
 
-  constructor(private readonly bridge: CefBridge, onEvent: (event: RequestEvent) => void,
+  constructor(private readonly bridge: NativeBridge, onEvent: (event: RequestEvent) => void,
     private readonly onError: (code: string) => void, timeoutMs = 5000,
     onAccepted: (event: AcceptedEvent) => void = () => {}) {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60000) throw new Error('INVALID_TIMEOUT');
-    this.cancellations = new CancellationRpcClient(new CefSystemTransport(bridge), timeoutMs);
+    this.cancellations = new CancellationRpcClient(new BridgeSystemTransport(bridge), timeoutMs);
     this.ready = new Promise<void>((resolve, reject) => {
       this.rejectReady = reject;
       this.timer = setTimeout(() => this.fail('RPC_TIMEOUT'), timeoutMs);
@@ -99,8 +100,9 @@ export class NativeEventSubscription {
 }
 
 export function createNativeEvents(allowFake: boolean, onError: (code: string) => void): Pick<NativeEventSubscription, 'ready' | 'close'> {
-  if (window.cefQuery && window.cefQueryCancel) {
-    return new NativeEventSubscription({ query: window.cefQuery.bind(window), cancel: window.cefQueryCancel.bind(window) }, () => {}, onError);
+  const bridge = getNativeBridge();
+  if (bridge) {
+    return new NativeEventSubscription(bridge, () => {}, onError);
   }
   return { ready: allowFake ? Promise.resolve() : Promise.reject(new Error('TRANSPORT_UNAVAILABLE')), close: () => {} };
 }

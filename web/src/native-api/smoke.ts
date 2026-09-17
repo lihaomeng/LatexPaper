@@ -1,9 +1,10 @@
+import { getNativeBridge } from './bridge';
 import { NativeEventSubscription, createNativeEvents } from './subscription';
-import { CefSystemTransport, SystemRpcClient } from './system';
-import type { CefBridge } from './index';
+import { BridgeSystemTransport, SystemRpcClient } from './system';
+import type { NativeBridge } from './bridge';
 
 /** Test probe uses the real bridge and checks three independent observations. */
-export function cancellationProbe(bridge: CefBridge): { ready: Promise<void>; close(): void } {
+export function cancellationProbe(bridge: NativeBridge): { ready: Promise<void>; close(): void } {
   const controller = new AbortController();
   const id = crypto.randomUUID();
   let subscription: NativeEventSubscription | undefined;
@@ -44,7 +45,7 @@ export function cancellationProbe(bridge: CefBridge): { ready: Promise<void>; cl
       }).catch(() => finish('RPC_PROBE_CANCEL_FAILED'));
     });
     void subscription.ready.then(async () => {
-      const client = new SystemRpcClient(new CefSystemTransport(bridge));
+      const client = new SystemRpcClient(new BridgeSystemTransport(bridge));
       try {
         await client.request({ version: 2, id, clientSequence: 0, method: 'system.ping', params: {} }, controller.signal);
         finish('RPC_PROBE_UNEXPECTED_SUCCESS');
@@ -61,10 +62,11 @@ export function cancellationProbe(bridge: CefBridge): { ready: Promise<void>; cl
 export function createStartupEvents(allowFake: boolean, onError: (code: string) => void, smoke: boolean):
 Pick<NativeEventSubscription, 'ready' | 'close'> {
   if (!smoke) return createNativeEvents(allowFake, onError);
-  if (!window.cefQuery || !window.cefQueryCancel) {
+  const bridge = getNativeBridge();
+  if (!bridge) {
     return { ready: Promise.reject(new Error('TRANSPORT_UNAVAILABLE')), close: () => {} };
   }
-  const probe = cancellationProbe({ query: window.cefQuery.bind(window), cancel: window.cefQueryCancel.bind(window) });
+  const probe = cancellationProbe(bridge);
   let events: Pick<NativeEventSubscription, 'ready' | 'close'> | undefined;
   let closed = false;
   return {

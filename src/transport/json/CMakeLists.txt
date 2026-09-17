@@ -1,0 +1,17 @@
+set(LOL_JSON_ROOT "${PROJECT_SOURCE_DIR}/out/dependencies")
+set(LOL_JSON_HEADER "${LOL_JSON_ROOT}/nlohmann/json.hpp")
+set(LOL_JSON_SHA256 "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63")
+if(NOT EXISTS "${LOL_JSON_HEADER}")
+  file(DOWNLOAD
+    "https://raw.githubusercontent.com/nlohmann/json/v3.12.0/single_include/nlohmann/json.hpp"
+    "${LOL_JSON_HEADER}" EXPECTED_HASH "SHA256=${LOL_JSON_SHA256}" TLS_VERIFY ON)
+endif()
+file(SHA256 "${LOL_JSON_HEADER}" actualHash)
+if(NOT actualHash STREQUAL LOL_JSON_SHA256)
+  message(FATAL_ERROR "nlohmann/json 3.12.0 checksum mismatch")
+endif()
+add_library(lol_transport_json STATIC kjsontransport.cpp)
+target_include_directories(lol_transport_json PUBLIC include)
+target_include_directories(lol_transport_json SYSTEM PRIVATE "${LOL_JSON_ROOT}")
+target_link_libraries(lol_transport_json PUBLIC lol_rpc_core lol_platform_ports)
+lol_register(lol_transport_json transport json)

@@ -1,6 +1,7 @@
+import { getNativeBridge } from './bridge';
 import { validateRpcRequest, validateResponse, validateCapabilitiesResponse,
   type RpcRequest, type Response, type CapabilitiesResponseResult } from '../../.generated/rpc/protocol';
-import type { CefBridge } from './index';
+import type { NativeBridge } from './bridge';
 
 const maxRpcWireBytes = 32 * 1024 * 1024;
 
@@ -8,8 +9,8 @@ export interface SystemTransport {
   send(request: string, success: (response: string) => void, failure: (code: string) => void): () => void;
 }
 
-export class CefSystemTransport implements SystemTransport {
-  constructor(private readonly bridge: CefBridge) {}
+export class BridgeSystemTransport implements SystemTransport {
+  constructor(private readonly bridge: NativeBridge) {}
   send(request: string, success: (response: string) => void, failure: (code: string) => void): () => void {
     const id = this.bridge.query({ request, persistent: false, onSuccess: success,
       onFailure: (_code, message) => failure(message || 'TRANSPORT_UNAVAILABLE') });
@@ -104,9 +105,12 @@ export class SystemRpcClient {
 }
 
 export function createSystemConnection(allowFake: boolean, timeoutMs = 5000): SystemRpcClient {
-  if (window.cefQuery && window.cefQueryCancel) {
-    return new SystemRpcClient(new CefSystemTransport({ query: window.cefQuery.bind(window), cancel: window.cefQueryCancel.bind(window) }), timeoutMs);
+  const bridge = getNativeBridge();
+  if (bridge) {
+    return new SystemRpcClient(new BridgeSystemTransport(bridge), timeoutMs);
   }
   if (allowFake) return new SystemRpcClient(new FakeSystemTransport(), timeoutMs);
   return new SystemRpcClient({ send: () => { throw new Error('TRANSPORT_UNAVAILABLE'); } }, timeoutMs);
 }
+
+export { BridgeSystemTransport as CefSystemTransport };

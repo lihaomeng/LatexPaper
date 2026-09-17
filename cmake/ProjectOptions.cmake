@@ -11,3 +11,9 @@ if(MSVC)
   add_compile_options(/W4 /permissive- /utf-8)
 endif()
 
+
+option(LIGHTOVERLEAF_BUILD_ELECTRON "Build the Electron C++ backend" OFF)
+if(LIGHTOVERLEAF_BUILD_ELECTRON AND LIGHTOVERLEAF_BUILD_DESKTOP)
+  message(FATAL_ERROR "Choose Electron or legacy Qt/CEF, not both in one build tree")
+endif()
+option(LIGHTOVERLEAF_DEV_BUILD "Build application assets without running tests" OFF)

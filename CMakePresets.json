@@ -34,6 +34,17 @@
       "cacheVariables": {
         "LIGHTOVERLEAF_BUILD_DESKTOP": "ON"
       }
+    },
+    {
+      "name": "electron-dev",
+      "inherits": "core-release",
+      "binaryDir": "${sourceDir}/out/electron-dev",
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF",
+        "LIGHTOVERLEAF_BUILD_DESKTOP": "OFF",
+        "LIGHTOVERLEAF_BUILD_ELECTRON": "ON",
+        "LIGHTOVERLEAF_DEV_BUILD": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -55,6 +66,11 @@
     {
       "name": "desktop-release",
       "configurePreset": "desktop-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "electron-dev",
+      "configurePreset": "electron-dev",
       "configuration": "Release"
     }
   ],
@@ -93,4 +109,3 @@
     }
   ]
 }
-

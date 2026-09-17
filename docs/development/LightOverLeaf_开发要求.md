@@ -1,12 +1,23 @@
-# LightOverLeaf 架构与开发要求（V2）
+# LightOverLeaf 架构与开发要求（V2，Electron 迁移补充）
 
 | 属性 | 内容 |
 |---|---|
 | 文档状态 | 项目架构基线 |
 | 目标平台 | Windows 10/11 x64 |
-| 技术栈 | C++20、Qt 5.15、CEF、React、TypeScript、Monaco、PDF.js、CMake |
+| 技术栈 | C++20 后端、Electron、React、TypeScript、Monaco、PDF.js、CMake |
 | 产品形态 | 本地单用户、离线优先的桌面 LaTeX 编辑器 |
 | 更新日期 | 2026-09-13 |
+
+## 2026-09-17：Electron 桌面架构决定
+
+用户已要求用 Electron + TypeScript 替换 Qt/CEF 外壳，C++ 保留编译与原生业务。现行规则以 [ADR 0019](../architecture/adr/0019-electron-native-backend.md) 为准；下文涉及 Qt/CEF 的进程、资源和发布说明保留为旧版记录，不约束新的 Electron 外壳。模块边界、业务安全和 RPC 契约规则继续生效。
+
+- Renderer：React + TypeScript，通过沙箱 preload 暴露的 NativeBridge 调用原生能力。
+- Electron main：窗口、目录选择、受控资源加载与 C++ 后端生命周期。
+- C++ backend：现有项目、文档、编译、预览、导航与持久化模块；不依赖 Electron ABI、Qt 或 CEF。
+- 默认唯一日常编译命令仍为 `scripts/build.ps1 --dev`，现在选择 `electron-dev`，关闭测试构建和执行。
+- 输出入口：`out/electron-dev/bin/Release/LightOverLeaf.exe`。
+- 旧 Qt/CEF 仅显式 `-Preset desktop-release --dev` 构建；历史测试不代表 Electron 已验收。
 
 ## 1. 文档定位
 

@@ -1,70 +1,44 @@
 # LightOverLeaf
 
-Windows 本地 LaTeX 编辑器。Qt/CEF 外壳、React 深色三栏工作台、Monaco 多标签、本地项目、搜索、可取消 TeX 编译、PDF.js 预览、SyncTeX 适配器、SQLite 偏好与会话恢复均已接入。无 TeX 时应用会明确报告编译与 SyncTeX 不可用，不生成伪造结果。
+Windows 本地 LaTeX 编辑器。当前桌面架构为 **Electron + TypeScript + React**，原生业务后端为 **C++20**。Monaco 负责源码编辑，PDF.js 负责预览；项目文件、原子保存、编译、SyncTeX、SQLite 设置与会话服务继续由 C++ 模块提供。
 
-当前进展、自动化证据和外部环境阻塞见 [阶段进度](docs/development/阶段进度.md)。最新 Lite 单文件 EXE 见 [M8 发布记录](docs/acceptance/M8-release.md)。
+## 开发构建
 
-按 M0 → M8 顺序执行的状态、阻塞与本地记录入口见 [阶段进度](docs/development/阶段进度.md)。
-
-M3 System RPC 基线已通过：纯 C++ 会话端点、Loopback/CEF 共用替换场景、真实跨进程取消、重载隔离与 V1 兼容；见 [最新 M3 记录](docs/acceptance/M3-endpoint-substitution.md)。进入 M4；M2 未验收项仍保留。
-
-M4 已通过原生目录选择、业务 RPC 和有界 Worker 接入独立的 Workspace/Document Adapter，`nativeFiles=true`。支持多文件保存、冲突对比/三方合并、原子非覆盖另存、文件与目录管理、带索引的项目回收恢复，以及 Windows 原生变化通知驱动的安全刷新。剩余项仅是 4 MiB 真实跨进程极值、特权 Reparse Point/极端长路径/崩溃中断夹具和可见桌面中文 IME 人工验收；详见 [M4 记录](docs/acceptance/M4-document-core.md)。
-
-## 构建
-
-需要 CMake ≥ 3.21、Python ≥ 3.10、C++20 编译器。仓库 Presets 对应本机 Visual Studio 2019 x64；其他机器可使用 CMakeUserPresets.json 覆盖生成器和依赖根目录。
+在项目根目录运行唯一日常构建入口：
 
 ```powershell
-cmake --preset core-debug
-cmake --build --preset core-debug
-ctest --preset core-debug
+.\scripts\build.ps1 --dev
 ```
 
-纯核心构建不查找 Qt、CEF、TeX 或 Node。Release 使用对应的 `core-release` 预设。
+生成可直接打开的：
 
-## 桌面验证
-
-需要 Qt 5.15、CEF 150 Windows x64、Node 24 与 npm。默认原生依赖路径集中在 CMake cache 变量中：
-
-```powershell
-cmake --preset desktop-debug -DLIGHTOVERLEAF_THIRDPARTY_ROOT=D:/CodeMyself/QTBest/thirdparty_install
-cmake --build --preset desktop-debug
-ctest --preset desktop-debug
-& ./out/desktop-debug/bin/Debug/LightOverLeaf.exe
+```text
+out/electron-dev/bin/Release/LightOverLeaf.exe
 ```
 
-CEF 路径可单独通过 `CEF_ROOT` 覆盖；Qt 可通过 `Qt5_DIR` 指定。
-`desktop-release` 同样使用独立目录，产物在 `out/desktop-release/bin/Release/`。
-首次构建会编译 CEF wrapper，并执行 `npm ci`、前端检查与生产构建。构建不下载原生库或安装 TeX。
+请保留同目录的 Electron 资源、`LightOverLeafBackend.exe`、SQLite 和 `runtime/miktex`，不能只复制入口 EXE。构建执行 CMake 架构检查、契约生成和 TypeScript 类型检查，不编译测试目标、不运行 CTest 或 npm test。
 
-`LightOverLeafDesktopSmoke` 等待 React 完成真实 CEF/C++ Ping 往返，再走浏览器正常关闭协议；45 秒内未退出即失败。
-`LightOverLeafRendererRecoverySmoke` 通过测试参数使本应用 Renderer 崩溃，验证重载、再次原生通信和正常关闭。
-纯 C++ 生命周期测试使用注入时钟验证启动 20 秒、关闭 10 秒的超时边界；Qt 集成测试使用 Fake 浏览器验证回调顺序与两次恢复上限。
+需要 Windows x64、CMake ≥ 3.21、C++20/MSVC、Python ≥ 3.10、Node.js/npm，以及 `LIGHTOVERLEAF_THIRDPARTY_ROOT` 下的 SQLite 和独立 MiKTeX Runtime。新桌面不需要 Qt/CEF。首次构建按锁文件下载 Electron/npm 依赖，并下载带 SHA-256 校验的 nlohmann/json 3.12.0 头文件到忽略目录；依赖就绪后可复用。
 
-## 开发版 EXE 打包
+## 模块边界
 
-在 PowerShell 运行 `./scripts/package-lite.ps1`，生成可直接运行的 Lite 单文件 EXE；已有最新 Release 时可加 `-SkipBuild`。输出位于 `out/packages/`，附带清单、哈希和解压启动验证结果。Full 包需显式提供 Portable TeX 根目录；详见 [M8 发布记录](docs/acceptance/M8-release.md)。
+- `apps/electron/src/`：窗口、原生目录对话框、沙箱 preload、资源加载、C++ 进程生命周期。
+- `apps/backend/`：C++ 管道进程入口和端点调度。
+- `apps/desktop/`：复用的 C++ 业务装配。
+- `web/src/`：React/TypeScript、Monaco、PDF.js 与 NativeApi。
+- `src/modules/`：业务 Domain、Application、Ports 与 Adapters。
+- `src/transport/json/`：不依赖 Qt/CEF 的 JSON 传输适配。
+- `contracts/rpc/`：前后端共用 RPC 契约。
+- `scripts/`：开发命令入口；`tools/`：契约生成和架构检查实现。
 
-## 前端独立开发
+界面通过 `window.lightoverleaf` 的窄接口发送 RPC。Electron 校验来源和契约，使用私有 stdio 管道连接后端，不开本地 HTTP 端口。原生选择的绝对路径只存在于主进程与后端之间，不由 Renderer 提供。
 
-```powershell
-cd web
-npm ci
-npm run dev
-npm run check
-```
+设计和迁移边界见 [ADR 0019](docs/architecture/adr/0019-electron-native-backend.md)。SQLite 设置和原生项目格式保持兼容；Electron 与 CEF 的浏览器存储相互独立，旧 CEF 草稿缓存尚未自动迁入，请先在旧版显式导出需要保留的草稿。
 
-Vite 仅监听 127.0.0.1，可使用显式 Fake NativeApi。生产构建由 CEF 受控资源地址加载，不启动 HTTP 服务，且必须使用真实原生通道；通道缺失时报告失败，不回退到 Fake。
+## 旧版与验证记录
 
-## 架构与契约
+Qt/CEF 源码和 `desktop-debug` / `desktop-release` 预设暂时保留，用于迁移对照。显式旧版开发构建为 `scripts/build.ps1 -Preset desktop-release --dev`；它不再是默认桌面。现有发布脚本和历史 M0–M9 验收记录属于旧版，不能作为 Electron 运行或发布验收证据。
 
-- System、Workspace、Document 各自拥有 Domain、Inbound、Outbound 和 App Target。
-- `cmake/ArchitectureRules.cmake` 导出实际 Target 链接并检查标记、宽泛 Include 根。
-- `tools/architecture/check.py` 检查白名单、循环和核心框架泄漏；负面测试让真实非法 CMake Configure 失败。
-- `contracts/rpc/v1/envelope.schema.json` 是 M0 Ping 请求的唯一来源；CMake 和 npm 自动生成 C++ 验证器与 TypeScript DTO/验证器。
-- C++ 核心验证输入是传输无关的值树；CEF Transport 已提供有大小/深度限制的 JSON 解析，并通过组合根注入平台。核心不依赖 CEF。
-- V1 Ping 保留经校验的请求回显；V2 使用结构化响应、Capabilities 和带会话序号的终态事件。CEF 取消可跳过排队请求，但尚非长任务或通用业务取消实现。
-- `tests/fixtures/ping.json` 为两种语言共享的接受/拒绝样例。
-- 生成代码、依赖和构建产物均忽略，不手写维护。
+Electron 本轮记录见 [迁移记录](docs/acceptance/electron-migration.md)。业务历史见 [阶段进度](docs/development/阶段进度.md) 与 [开发要求](docs/development/LightOverLeaf_开发要求.md)。
 
-实施范围见 [开发要求](docs/development/LightOverLeaf_开发要求.md)、[生命周期与通信 ADR](docs/architecture/adr/0002-lifecycle-native-ping.md) 与 [本轮验收记录](docs/acceptance/M1-native-ping.md)。[M0 验收记录](docs/acceptance/M0.md) 保留原阶段历史，不代表当前全部能力。
+浏览器独立开发仍可在 `web/` 运行 `npm run dev`，仅明确的浏览器开发模式允许 Fake NativeApi；桌面构建通道缺失时报告错误。

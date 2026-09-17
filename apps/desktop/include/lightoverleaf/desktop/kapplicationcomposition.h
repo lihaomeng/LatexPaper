@@ -7,6 +7,7 @@
 
 namespace lightoverleaf
 {
+using KNativeSelectionLookup = std::function<std::optional<std::string>(const std::string&)>;
 using KWorkspacePicker = std::function<std::optional<std::string>()>;
 
 class KApplicationComposition
@@ -25,5 +26,5 @@ private:
 };
 
 std::unique_ptr<KApplicationComposition> createApplicationComposition(KWorkspacePicker workspacePicker,
-    KWorkspacePicker exportPicker = {});
+    KWorkspacePicker exportPicker = {}, KNativeSelectionLookup selectionLookup = {});
 }

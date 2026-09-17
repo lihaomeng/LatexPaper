@@ -4,7 +4,11 @@
 #include <lightoverleaf/platform/ikworkerexecutor.h>
 #include <lightoverleaf/rpc/ikrpcendpoint.h>
 #include <lightoverleaf/rpc/kapplicationrpchandler.h>
+#ifdef LOL_ELECTRON_BACKEND
+#include <lightoverleaf/transport/kjsontransport.h>
+#else
 #include <lightoverleaf/transport/kceftransport.h>
+#endif
 #include <lightoverleaf/workspace/adapters/klocalworkspacestore.h>
 #include <lightoverleaf/workspace/inbound/ikworkspaces.h>
 #include <lightoverleaf/workspaceworkflow/inbound/ikworkspaceworkflow.h>
@@ -164,11 +168,11 @@ public:
         std::shared_ptr<workspaceworkflow::IKWorkspaceWorkflow> workflow,
         std::shared_ptr<rpc::KApplicationRpcHandler> handler,
         std::shared_ptr<exporting::IKExports> exports,
-        std::unique_ptr<IKWorkerExecutor> worker)
+        std::unique_ptr<IKWorkerExecutor> worker, KNativeSelectionLookup selectionLookup)
         : m_workspacePicker(std::move(workspacePicker)), m_exportPicker(std::move(exportPicker)),
           m_capabilities(std::move(capabilities)),
           m_workflow(std::move(workflow)), m_handler(std::move(handler)),
-          m_exports(std::move(exports)), m_worker(std::move(worker)) {}
+          m_exports(std::move(exports)), m_worker(std::move(worker)), m_selectionLookup(std::move(selectionLookup)) {}
     ~KImpl() { close(); }
     std::shared_ptr<IKNativeMessageEndpoint> createEndpoint(KNativeSchedule schedule,
         const std::string& sessionId)
@@ -195,8 +199,18 @@ public:
                     {
                         try
                         {
-                            selection = *name == "workspace.open" ? self->m_workspacePicker() :
-                                self->m_exportPicker();
+                            if (self->m_selectionLookup)
+                            {
+                                const auto id = object->find("id");
+                                const std::string* text = id == object->end() ? nullptr :
+                                    std::get_if<std::string>(&id->second.m_value);
+                                if (text) selection = self->m_selectionLookup(*text);
+                            }
+                            else
+                            {
+                                selection = *name == "workspace.open" ? self->m_workspacePicker() :
+                                    self->m_exportPicker();
+                            }
                         }
                         catch (...)
                         {
@@ -248,7 +262,11 @@ public:
                 return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
             }, m_capabilities);
+#ifdef LOL_ELECTRON_BACKEND
+        auto native = createJsonEndpoint(endpoint);
+#else
         auto native = createNativeEndpoint(endpoint);
+#endif
         return native ? std::make_shared<KSessionExportEndpoint>(std::move(native), m_exports, sessionId) :
             std::shared_ptr<IKNativeMessageEndpoint>{};
     }
@@ -271,6 +289,7 @@ private:
     std::shared_ptr<rpc::KApplicationRpcHandler> m_handler;
     std::shared_ptr<exporting::IKExports> m_exports;
     std::unique_ptr<IKWorkerExecutor> m_worker;
+    KNativeSelectionLookup m_selectionLookup;
     std::atomic_bool m_closed = false;
 };
 
@@ -294,7 +313,7 @@ void KApplicationComposition::close() noexcept
 }
 
 std::unique_ptr<KApplicationComposition> createApplicationComposition(
-    KWorkspacePicker workspacePicker, KWorkspacePicker exportPicker)
+    KWorkspacePicker workspacePicker, KWorkspacePicker exportPicker, KNativeSelectionLookup selectionLookup)
 {
     if (!workspacePicker) return nullptr;
     if (!exportPicker) exportPicker = workspacePicker;
@@ -428,7 +447,7 @@ std::unique_ptr<KApplicationComposition> createApplicationComposition(
         preferencesService, sessionsService, exportsService);
     auto impl = std::make_shared<KApplicationComposition::KImpl>(std::move(workspacePicker),
         std::move(exportPicker), capabilities,
-        std::move(sharedWorkflow), std::move(handler), std::move(exportsService), std::move(worker));
+        std::move(sharedWorkflow), std::move(handler), std::move(exportsService), std::move(worker), std::move(selectionLookup));
     return std::make_unique<KApplicationComposition>(std::move(impl));
 }
 }

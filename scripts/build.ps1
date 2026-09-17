@@ -1,15 +1,20 @@
 param(
-    [ValidateSet('core-debug','core-release','desktop-debug','desktop-release','--dev')][string]$Preset = 'core-debug',
+    [ValidateSet('core-debug','core-release','desktop-debug','desktop-release','electron-dev','--dev')][string]$Preset = 'core-debug',
     [Alias('-dev')][switch]$Dev,
     [string]$MiKTeXRoot,
     [switch]$RefreshRuntime,
     [switch]$FreshConfigure
 )
 $ErrorActionPreference = 'Stop'
-if ($Preset -eq '--dev') { $Dev = $true; $Preset = 'desktop-release' }
+if ($Preset -eq '--dev') { $Dev = $true; $Preset = 'electron-dev' }
 foreach ($argument in $args) {
     if ($argument -eq '--dev') { $Dev = $true }
     else { throw "Unknown build argument: $argument" }
+}
+if ($Dev -and -not $PSBoundParameters.ContainsKey('Preset')) { $Preset = 'electron-dev' }
+if ($Preset -eq 'electron-dev') {
+    & (Join-Path $PSScriptRoot 'build-electron.ps1') -Dev:$Dev -MiKTeXRoot $MiKTeXRoot -RefreshRuntime:$RefreshRuntime -FreshConfigure:$FreshConfigure
+    return
 }
 Push-Location (Join-Path $PSScriptRoot '..')
 try {
