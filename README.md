@@ -22,10 +22,10 @@ out/electron-dev/bin/Release/LightOverLeaf.exe
 
 ## 模块边界
 
-- `apps/electron/src/`：窗口、原生目录对话框、沙箱 preload、资源加载、C++ 进程生命周期。
+- `frontend/electron/src/`：窗口、原生目录对话框、沙箱 preload、资源加载、C++ 进程生命周期。
 - `apps/backend/`：C++ 管道进程入口和端点调度。
 - `apps/desktop/`：复用的 C++ 业务装配。
-- `web/src/`：React/TypeScript、Monaco、PDF.js 与 NativeApi。
+- `frontend/web/src/`：React/TypeScript、Monaco、PDF.js 与 NativeApi。
 - `src/modules/`：业务 Domain、Application、Ports 与 Adapters。
 - `src/transport/json/`：不依赖 Qt/CEF 的 JSON 传输适配。
 - `contracts/rpc/`：前后端共用 RPC 契约。
@@ -41,6 +41,6 @@ Qt/CEF 源码和 `desktop-debug` / `desktop-release` 预设暂时保留，用于
 
 Electron 本轮记录见 [迁移记录](docs/acceptance/electron-migration.md)。业务历史见 [阶段进度](docs/development/阶段进度.md) 与 [开发要求](docs/development/LightOverLeaf_开发要求.md)。
 
-浏览器独立开发仍可在 `web/` 运行 `npm run dev`，仅明确的浏览器开发模式允许 Fake NativeApi；桌面构建通道缺失时报告错误。
+浏览器独立开发仍可在 `frontend/web/` 运行 `npm run dev`，仅明确的浏览器开发模式允许 Fake NativeApi；桌面构建通道缺失时报告错误。
 
 脚本职责和迁移路径见 [脚本说明](scripts/README.md)。构建产物集中在 `out/`，浏览器检查产物集中在 `out/verification/`。

@@ -80,7 +80,7 @@ try {
     $licenses = Join-Path $distribution 'licenses'
     New-Item -ItemType Directory -Path $licenses -Force | Out-Null
     foreach ($package in @('react', 'react-dom', 'scheduler', 'monaco-editor', 'pdfjs-dist')) {
-        $license = Join-Path $repo "web/node_modules/$package/LICENSE"
+        $license = Join-Path $repo "frontend/web/node_modules/$package/LICENSE"
         Require-File $license
         Copy-Item -LiteralPath $license -Destination (Join-Path $licenses "$package.txt") -Force
     }

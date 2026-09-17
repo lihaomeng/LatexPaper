@@ -16,7 +16,7 @@ try {
     & cmake --build --preset electron-dev
     if ($LASTEXITCODE -ne 0) { throw 'Backend build failed.' }
     & (Join-Path $PSScriptRoot 'build-frontend.ps1') -Mode dev
-    Push-Location (Join-Path $repo 'apps/electron')
+    Push-Location (Join-Path $repo 'frontend/electron')
     try {
         $fingerprint = ((Get-FileHash package.json).Hash, (Get-FileHash package-lock.json).Hash,
             (& node --version)) -join ':'
@@ -34,7 +34,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Electron TypeScript build failed.' }
     } finally { Pop-Location }
     $runtime = Join-Path $repo 'out/electron-dev/bin/Release'
-    $electron = Join-Path $repo 'apps/electron/node_modules/electron/dist'
+    $electron = Join-Path $repo 'frontend/electron/node_modules/electron/dist'
     Get-ChildItem -LiteralPath $electron | Where-Object Name -ne 'electron.exe' |
         Copy-Item -Destination $runtime -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $electron 'electron.exe') -Destination (Join-Path $runtime 'LightOverLeaf.exe') -Force
@@ -45,7 +45,7 @@ try {
         '{"name":"lightoverleaf","version":"0.1.0","main":"main.js"}', [Text.UTF8Encoding]::new($false))
     $webTarget = Join-Path $application 'web'
     New-Item -ItemType Directory -Force $webTarget | Out-Null
-    Copy-Item -Path (Join-Path $repo 'web/dist/*') -Destination $webTarget -Recurse -Force
+    Copy-Item -Path (Join-Path $repo 'frontend/web/dist/*') -Destination $webTarget -Recurse -Force
     if (!$MiKTeXRoot) {
         $dependencyLine = Get-Content 'out/electron-dev/CMakeCache.txt' |
             Where-Object { $_ -match '^LIGHTOVERLEAF_THIRDPARTY_ROOT:PATH=' } | Select-Object -First 1

@@ -1,8 +1,8 @@
 /out/
 /build/
 **/.generated/
-web/node_modules/
-web/dist/
+frontend/web/node_modules/
+frontend/web/dist/
 CMakeUserPresets.json
 *.user
 *.aux
@@ -15,4 +15,4 @@ __pycache__/
 cef-cache/
 /output/playwright/
 /.playwright-cli/
-apps/electron/node_modules/
+frontend/electron/node_modules/

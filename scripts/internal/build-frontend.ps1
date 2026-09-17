@@ -1,6 +1,6 @@
 param([ValidateSet('dev','release')][string]$Mode = 'dev')
 $ErrorActionPreference = 'Stop'
-Push-Location (Join-Path $PSScriptRoot '../../web')
+Push-Location (Join-Path $PSScriptRoot '../../frontend/web')
 try {
     $nodeVersion = & node --version
     if ($LASTEXITCODE -ne 0) { throw 'Node.js is unavailable.' }

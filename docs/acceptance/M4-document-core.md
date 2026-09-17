@@ -65,7 +65,7 @@ Fake 测试验证冲突不覆盖、保存不额外读取、中文文本、非法
 | cmake --build --preset core-release；ctest --preset core-release --output-on-failure | 退出码 0；15/15 通过，10.08s |
 | cmake --build --preset desktop-release；ctest --preset desktop-release --output-on-failure | 退出码 0；25/25 通过，21.99s；包含多文件保存修复后的前端资源 |
 
-运行入口：`out/desktop-release/bin/Release/LightOverLeaf.exe`。应用逻辑位于同目录 `LightOverLeaf.dll`，部署的 `web/index.html` 与本轮 `web/dist/index.html` 均引用 `index-DOfOMR00.js`。运行时须保留同目录 DLL、CEF/Qt 与 web 资源；这次更新的是运行目录，旧自解压包未重打。
+运行入口：`out/desktop-release/bin/Release/LightOverLeaf.exe`。应用逻辑位于同目录 `LightOverLeaf.dll`，部署的 `web/index.html` 与本轮 `frontend/web/dist/index.html` 均引用 `index-DOfOMR00.js`。运行时须保留同目录 DLL、CEF/Qt 与 web 资源；这次更新的是运行目录，旧自解压包未重打。
 
 最新未完成项：本地文件新建/重命名/删除；冲突后的重新加载或另存交互；CEF 桌面视觉和中文 IME；完整 4 MiB 真实进程传输边界；Reparse Point 实物夹具；长路径、崩溃中断及提交复检到替换之间的外部竞态强化。Worker 关闭依赖任务协作停止，仍需更强 I/O 超时机制。Vite 大块体积警告尚存在。
 

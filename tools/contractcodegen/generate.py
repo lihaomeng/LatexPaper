@@ -205,7 +205,7 @@ def main():
     if list(schema['properties']) != expected or schema['properties']['method']['const'] != 'system.ping' or schema['properties']['version']['const'] != 1:
         raise ValueError('Extend DTO generation before changing the M0 shape')
     write(args.cpp_out / 'krpccontract.h', generate_cpp(schema), args.check)
-    write(ROOT / 'web/.generated/rpc/contract.ts', generate_ts(schema), args.check)
+    write(ROOT / 'frontend/web/.generated/rpc/contract.ts', generate_ts(schema), args.check)
     tests = ['#include <krpccontract.h>', '#include <iostream>',
              'using namespace lightoverleaf::rpc;', 'int main()', '{', '    int failures = 0;']
     fixtures = json.loads((ROOT / 'tests/fixtures/ping.json').read_text(encoding='utf-8'))

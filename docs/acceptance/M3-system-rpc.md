@@ -15,7 +15,7 @@
 - 前端 V2 传输可替换，校验响应关联、限制在途请求、拒绝重复在途 ID、处理超时／AbortSignal／迟到回调。
 - 桌面就绪检查依次完成 V1 Ping、V2 Ping 和 V2 Capabilities，不用 Fake 通过生产 Smoke。
 
-主要文件：`contracts/rpc/v2/system.schema.json`、`tools/contractcodegen/protocol.py`、`src/modules/system/application/`、`src/transport/rpc/`、`src/transport/loopback/`、`src/transport/cef/`、`web/src/native-api/system.ts`。
+主要文件：`contracts/rpc/v2/system.schema.json`、`tools/contractcodegen/protocol.py`、`src/modules/system/application/`、`src/transport/rpc/`、`src/transport/loopback/`、`src/transport/cef/`、`frontend/web/src/native-api/system.ts`。
 
 ## 实际验证
 

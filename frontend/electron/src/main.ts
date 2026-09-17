@@ -2,8 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, session, type IpcMainEvent } from 
 import path from 'node:path';
 import { BackendClient, maxWireBytes, type NativeReply } from './backend';
 import { applicationUrl, registerAssets } from './assets';
-import { validateRpcRequest, validateCancellation } from '../../../web/.generated/rpc/protocol';
-import { validatePing } from '../../../web/.generated/rpc/contract';
+import { validateRpcRequest, validateCancellation } from '../../web/.generated/rpc/protocol';
+import { validatePing } from '../../web/.generated/rpc/contract';
 
 type Pending = { persistent: boolean; sent: boolean };
 let window: BrowserWindow | undefined;

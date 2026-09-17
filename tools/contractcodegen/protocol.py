@@ -170,7 +170,7 @@ def generate_protocol(root, cpp_out, write, check):
     ts.append('export function validateResponse(value: unknown): value is Response { return ' +
               ' || '.join('validate' + name + '(value)' for name in response_names) + '; }')
     write(cpp_out / 'krpcprotocol.h', '\n'.join(cpp) + '\n', check)
-    write(root / 'web/.generated/rpc/protocol.ts', '\n'.join(ts) + '\n', check)
+    write(root / 'frontend/web/.generated/rpc/protocol.ts', '\n'.join(ts) + '\n', check)
 
     fixtures = []
     for fixture_path in sorted((root / 'tests/fixtures').glob('*-v2.json')):

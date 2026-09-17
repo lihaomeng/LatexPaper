@@ -487,7 +487,7 @@ composition       -> factories + adapters + transports + platforms
 生成内容：
 
 - C++ DTO、校验器和 Method/Event 常量生成到 CMake Binary Directory。
-- TypeScript DTO、Validator 和 `NativeApi` 基础代码生成到 `web/.generated/rpc/`。
+- TypeScript DTO、Validator 和 `NativeApi` 基础代码生成到 `frontend/web/.generated/rpc/`。
 - 生成文件不得手工修改，也不得与手写 DTO 并行维护。
 - `npm run dev`、`npm test` 和 CMake Configure 必须在需要时先执行 Contract Codegen。
 - CI/本地验证要检查 Schema 生成后工作区没有非预期差异。
@@ -745,7 +745,7 @@ Build 模块不读取 Monaco 状态，也不直接询问 React。编译输入必
 ## 16. React 前端架构
 
 ~~~text
-web/src/
+frontend/web/src/
 ├── app/          组合、路由、Provider、全局布局
 ├── native-api/   Generated DTO 的薄封装、请求、事件、取消
 ├── features/     按用户能力隔离的 Feature
@@ -897,7 +897,7 @@ web/src/
 
 - Development 使用 Vite Dev Server。
 - Release 使用 `npm ci`、Contract Codegen、测试和 `npm run build`。
-- CMake 只消费确定的 `web/dist`。
+- CMake 只消费确定的 `frontend/web/dist`。
 - Release 使用受控应用 URL，不依赖本地 Web Server。
 - 前端构建失败必须使发布构建失败。
 

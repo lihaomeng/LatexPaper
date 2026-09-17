@@ -3,7 +3,7 @@
 Status: accepted, 2026-09-17, requested by the user.
 
 Electron replaces the Qt/CEF desktop shell. React, TypeScript, Monaco and PDF.js
-remain in `web/`. Electron main and sandboxed preload live in `apps/electron/`.
+remain in `frontend/web/`. Electron main and sandboxed preload live in `frontend/electron/`.
 The C++ application and adapters run in `LightOverLeafBackend.exe`; no Electron
 or Node ABI enters the business modules. The existing V1/V2 RPC schemas remain
 the source of truth.
@@ -40,7 +40,7 @@ Implementation references:
 - https://www.electronjs.org/docs/latest/tutorial/context-isolation
 - https://www.electronjs.org/docs/latest/api/protocol
 
-Electron version is pinned in apps/electron/package-lock.json. The development
+Electron version is pinned in frontend/electron/package-lock.json. The development
 build uses the package's explicit install.js runtime installation command.
 
 ## 2026-09-17：开发分发入口收敛

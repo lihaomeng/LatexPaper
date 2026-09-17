@@ -6,7 +6,7 @@ import { SystemRpcClient, FakeSystemTransport, CefSystemTransport } from '../src
 import type { SystemTransport } from '../src/native-api/system.ts';
 
 const fixtures = ['system-v2.json', 'lifecycle-v2.json', 'workspace-v2.json', 'document-v2.json']
-  .flatMap(file => JSON.parse(readFileSync(new URL('../../tests/fixtures/' + file, import.meta.url), 'utf8'))) as {
+  .flatMap(file => JSON.parse(readFileSync(new URL('../../../tests/fixtures/' + file, import.meta.url), 'utf8'))) as {
   name: string; type: 'Request' | 'PingResponse' | 'CapabilitiesResponse' | 'ErrorResponse' |
     'Cancellation' | 'RequestEvent' | 'ConnectedEvent' | 'AcceptedEvent' | 'CancellationResponse' |
     'WorkspaceRequest' | 'WorkspaceManageRequest' | 'WorkspaceStateResponse' | 'WorkspaceClosedResponse' |

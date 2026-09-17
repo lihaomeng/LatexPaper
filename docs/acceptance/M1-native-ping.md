@@ -63,7 +63,7 @@ npm.cmd run check --prefix web
 
 启动后页面显示 `CEF 原生通信`，往返成功时显示 `接口往返校验通过`。目前页面仍是启动基础页，没有伪装成已具备编辑器功能的 UI 占位。
 
-自动测试会自行退出；正常启动不加 Smoke 参数。Debug 产物位于 `out/desktop-debug/bin/Debug/`。运行时 DLL、CEF 资源与 `web/` 必须保留在产物目录，不应单独复制 EXE。
+自动测试会自行退出；正常启动不加 Smoke 参数。Debug 产物位于 `out/desktop-debug/bin/Debug/`。运行时 DLL、CEF 资源与 `frontend/web/` 必须保留在产物目录，不应单独复制 EXE。
 
 详细证据为本地忽略产物：
 

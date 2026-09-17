@@ -37,7 +37,7 @@ $sqliteLicense = Join-Path ($dependencyLine -replace '^[^=]+=', '') 'vcpkg/insta
 Require-File $sqliteLicense
 $licenseSources = @{}
 foreach ($package in @('react', 'react-dom', 'scheduler', 'monaco-editor', 'pdfjs-dist')) {
-    $license = Join-Path $repo "web/node_modules/$package/LICENSE"
+    $license = Join-Path $repo "frontend/web/node_modules/$package/LICENSE"
     Require-File $license
     $licenseSources[$package] = $license
 }
