@@ -1,3 +1,5 @@
+import { Dialog } from "../shared/ui/Dialog";
+import { previewPresentation } from "../features/preview";
 import { useLocalWorkspace } from "./workflows/useLocalWorkspace";
 import { useDocumentPersistence } from "./workflows/useDocumentPersistence";
 import { useConflictRecovery } from "./workflows/useConflictRecovery";
@@ -22,6 +24,7 @@ import { OutlinePanel } from "./layout/OutlinePanel";
 import { useWorkbenchLayout } from "./layout/useWorkbenchLayout";
 import { useDraftWorkspace, type CacheStatus } from "./useDraftWorkspace";
 import { validWorkspaceDirectoryId } from "./workspacePaths";
+import "../shared/styles/tokens.css";
 import "./style.css";
 import "./layout/workbench.css";
 import { CompileController } from "./compileController";
@@ -188,39 +191,22 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     return () => window.clearTimeout(timer);
   }, [native, sessionReady, workspaceBusy, project?.workspaceId, localSession, view.open, view.active, view.line, view.column]);
   useEffect(() => {
-    if (native === "ready" && editorReady && activeStatus === "saved") document.title = "LightOverLeaf · Native Ready";
-    else if (native === "error") document.title = "LightOverLeaf · Native Error";
-  }, [native, editorReady, activeStatus]);
+    document.title = `${view.active?.split("/").at(-1) ?? "写作工作台"} · ${project?.displayName ?? "草稿"} · LightOverLeaf`;
+  }, [view.active, project?.displayName]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); save(); }
-      if (event.key === "Escape") setModal(null);
+      if (!modal && !event.isComposing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); save(); }
+
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [save]);
+  }, [save, modal]);
   useEffect(() => {
     const unload = (event: BeforeUnloadEvent) => { if (hasChanges) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", unload);
     return () => window.removeEventListener("beforeunload", unload);
   }, [hasChanges]);
   useEffect(() => { if (showSearch) search.current?.focus(); }, [showSearch]);
-  useEffect(() => {
-    if (!modal) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const dialog = document.querySelector<HTMLElement>(".modal");
-    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>("button:not([disabled]), input, textarea") ?? []);
-    (dialog?.querySelector<HTMLInputElement>("input") ?? focusable()[0])?.focus();
-    const trap = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      const first = elements[0], last = elements.at(-1);
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    };
-    dialog?.addEventListener("keydown", trap);
-    return () => { dialog?.removeEventListener("keydown", trap); if (previous?.isConnected) previous.focus(); };
-  }, [modal]);
   const openTrash = async () => {
     if (!project || workspaceBusy || mutationBusy.current) return;
     setWorkspaceBusy(true); setFileError('');
@@ -332,6 +318,18 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     void compileCurrent();
   };
   useEffect(() => {
+    const compileShortcut = (event: KeyboardEvent) => {
+      if (modal || event.isComposing || event.repeat || event.altKey || event.shiftKey ||
+          !(event.ctrlKey || event.metaKey) || event.key !== "Enter") return;
+      event.preventDefault();
+      const state = previewPresentation(buildView.state);
+      if (state.running) void cancelBuild();
+      else if (!state.preparing && !conflictFile) requestCompile();
+    };
+    window.addEventListener("keydown", compileShortcut);
+    return () => window.removeEventListener("keydown", compileShortcut);
+  });
+  useEffect(() => {
     if (workspaceBusy || !nativeBuild || preferences.compileMode !== "live" || localSession || !view.active ||
         view.revision <= lastAutoCompileRevision.current) return;
     const revision = view.revision;
@@ -428,7 +426,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
         revisions.current.delete(source);
       }
       setModal(null); setLocalStatus(localSession.getView().files.some(file => file.dirty) ? 'pending' : 'saved');
-      setLocalError(fileOperation === 'remove' ? '文件已移入项目内 .lightoverleaf-trash，可在资源管理器中移回原位置恢复。' : '');
+      setLocalError(fileOperation === 'remove' ? '文件已移入项目内 .lightoverleaf-trash，可通过“项目回收站”恢复。' : '');
     } catch (failure) {
       const code = (failure as Error).message;
       setFileError(code === 'FILE_CONFLICT' ? '目标文件已存在，未覆盖。请换一个名称。' : '文件操作失败：' + code);
@@ -488,7 +486,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       setProject(next); refreshDeferred.current = false; setModal(null);
       setLocalStatus(localSession.getView().files.some(file => file.dirty) ? 'pending' : 'saved');
       setLocalError(directoryOperation === 'remove' ?
-        '目录已连同内容移入项目内 .lightoverleaf-trash，可在资源管理器中恢复。' : '');
+        '目录已连同内容移入项目内 .lightoverleaf-trash，可通过“项目回收站”恢复。' : '');
     } catch (failure) {
       const code = (failure as Error).message;
       setFileError(code === 'FILE_CONFLICT' ? '目标目录已存在，未覆盖。请换一个名称。' :
@@ -502,9 +500,16 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     .map(entry => entry.fileId) : [];
   const statusLabel = localSession ? ({ loading: "正在读取文件", pending: "有未保存修改", saving: "正在保存文件",
     saved: "本地文件已保存", error: "本地文件操作失败" } satisfies Record<CacheStatus, string>)[activeStatus] : labels[activeStatus];
+  const compilePresentation = previewPresentation(buildView.state);
+  const compileReason = !editorReady ? "编辑器正在初始化" : workspaceBusy ? "正在处理项目，请稍候" : conflictFile ? "请先处理文件冲突" :
+    !view.active ? "请先打开主文件" : !nativeBuild ? "编译服务尚未就绪，请检查设置" : "";
   return <main className="workbench">
     <WorkbenchHeader projectName={project?.displayName ?? "未命名项目"} local={Boolean(localSession)} busy={workspaceBusy}
       canOpen={nativeFiles && sessionReady && !workspaceBusy} canExport={nativeFiles && !workspaceBusy}
+      compileAction={compilePresentation.action} compileRunning={compilePresentation.running}
+      compileDisabled={compilePresentation.preparing || (!compilePresentation.running && Boolean(compileReason))}
+      compileReason={compilePresentation.preparing ? "正在准备编译" : compileReason}
+      onCompile={compilePresentation.running ? () => void cancelBuild() : requestCompile}
       recent={recentWorkspaces.map(id => ({ id, name: projectNames[id] ?? "本地项目" }))}
       onOpen={id => void openWorkspace(id)} onSave={save} onExport={() => void exportDraft()}
       onRefresh={() => void refreshWorkspace()} onSettings={openSettings} onHelp={() => setModal("help")}
@@ -561,8 +566,6 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
           <button className="tab-add" title="新建文件" aria-label="添加文件" disabled={workspaceBusy} onClick={newFile}><Icon name="plus" size={14} /></button>
         </div>
         <div className="editor-toolbar">
-          <Tool icon="save" label={localSession ? "保存本地文件 (Ctrl+S)" : "立即缓存草稿 (Ctrl+S)"} onClick={save} />
-          <span className="toolbar-divider" />
           <Tool icon="undo" label="撤销 (Ctrl+Z)" disabled={!view.active} onClick={() => editor.current?.run("undo")} />
           <Tool icon="redo" label="重做 (Ctrl+Y)" disabled={!view.active} onClick={() => editor.current?.run("redo")} />
           <span className="toolbar-divider" />
@@ -583,8 +586,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       {layout.previewVisible && layout.editorVisible && <Splitter label="调整编辑器宽度" min={300}
         max={layout.maxEditorWidth} value={editorWidth} onChange={setEditorWidth} />}
       <div className="preview-pane-shell" hidden={!layout.previewVisible}>
-        <PreviewPanel build={buildView} canCompile={Boolean(view.active && nativeBuild && !workspaceBusy)}
-          onCompile={requestCompile} onCancel={() => void cancelBuild()}
+        <PreviewPanel build={buildView}
           onConfigure={openSettings}
           onPreviewCommit={generation => setBuildView(current => {
             if (current.candidate?.generation !== generation) return current;
@@ -618,8 +620,8 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       <span className={"native-status " + (native === "error" ? "error" : "")} title={connection.mode}>
         <i className="tiny-dot" />{native === "error" ? "原生通信异常" : native === "pending" ? "连接中…" : connection.mode.includes("Fake") ? "浏览器开发模式" : "原生服务已连接"}</span>
       <span>行 {view.line}，列 {view.column}</span><span className="encoding-status">UTF-8</span><span className="encoding-status">LaTeX</span></footer>
-    {modal && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}>
-      <section className={"modal" + (modal === "conflict" ? " conflict-modal" : "")} role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+    {modal && <Dialog key={modal} className={modal === "conflict" ? "conflict-modal" : ""}
+      labelId="dialog-title" onClose={() => setModal(null)}>
         <div className="modal-title"><h2 id="dialog-title">{modal === "settings" ? "本地设置与会话" : modal === "trash" ? "项目回收站" : modal === "directory" ? "目录管理" : modal === "manage" ? ({ create: '新建本地文件', rename: '重命名文件', remove: '删除文件' })[fileOperation] : modal === "conflict" ? "处理文件冲突" : modal === "new" ? "新建草稿文件" : "你的本地写作工作台"}</h2><Tool icon="close" label="关闭对话框" onClick={() => setModal(null)} /></div>
         {modal === "settings" ? <SettingsForm preferencesDraft={preferencesDraft} setPreferencesDraft={setPreferencesDraft}
           settingsBusy={settingsBusy} settingsError={settingsError} recentWorkspaces={recentWorkspaces}
@@ -665,7 +667,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
             <button type="submit" className="primary" disabled={workspaceBusy}>
               {workspaceBusy ? '处理中…' : '确认'}</button></div>
         </form> : modal === "manage" ? <form onSubmit={event => { event.preventDefault(); void manageFile(); }}>
-          {fileOperation === 'remove' ? <p>将 {operationSource} 移入项目内 .lightoverleaf-trash。可在资源管理器中移回原位置恢复。</p> : <>
+          {fileOperation === 'remove' ? <p>将 {operationSource} 移入项目内 .lightoverleaf-trash。可通过“项目回收站”恢复。</p> : <>
             <label htmlFor="local-filename">{fileOperation === 'rename' ? '新名称或相对路径' : '文件名或相对路径'}</label>
             <input id="local-filename" disabled={workspaceBusy} value={filename} onChange={event => setFilename(event.target.value)} maxLength={160} />
             <p>父文件夹必须已存在；同名文件不会被覆盖。</p></>}
@@ -684,15 +686,15 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
           <div className="modal-actions"><button type="button" onClick={() => setModal(null)}>取消</button><button className="primary" type="submit">创建草稿</button></div>
         </form> : <>
           <p>已支持源码编辑、多标签、文件筛选、章节跳转和自动草稿缓存。</p>
-          <div className="shortcut"><span>立即缓存草稿</span><kbd>Ctrl + S</kbd></div>
+          <div className="shortcut"><span>编译 / 取消编译</span><kbd>Ctrl + Enter</kbd></div>
+          <div className="shortcut"><span>保存文件 / 缓存草稿</span><kbd>Ctrl + S</kbd></div>
           <div className="shortcut"><span>查找当前文档</span><kbd>Ctrl + F</kbd></div>
           <div className="shortcut"><span>撤销 / 重做</span><kbd>Ctrl + Z / Y</kbd></div>
           <p className="muted">缓存只属于当前应用配置。清除应用缓存会丢失草稿；异常退出可能丢失尚未缓存的最后输入。关闭标签不会删除文件。</p>
           <p className="muted">已支持本地项目、文件/目录管理、冲突恢复、搜索、可插拔 TeX 编译、PDF.js 预览和本机会话设置。磁盘变化不会覆盖并发编辑，删除内容保存在项目内 .lightoverleaf-trash。双向 SyncTeX 需要本机工具链提供 synctex.exe；未检测到 TeX 时不会模拟编译成功。</p>
           <div className="modal-actions"><button className="primary" onClick={() => setModal(null)}>开始写作</button></div>
         </>}
-      </section>
-    </div>}
+    </Dialog>}
   </main>;
 }
 function App() {

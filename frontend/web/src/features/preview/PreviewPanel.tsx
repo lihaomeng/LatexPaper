@@ -3,30 +3,27 @@ import { previewPresentation } from "./presentation";
 import { PdfCanvas } from "./PdfCanvas";
 import type { BuildView, PdfTarget, PdfZoomMode } from "./model";
 export type { BuildView, PdfTarget } from "./model";
-export function PreviewPanel({ build, canCompile, onCompile, onCancel, onConfigure,
+export function PreviewPanel({ build, onConfigure,
   onReverse, onPreviewCommit, onPreviewReject, target, zoom = 100, onZoomChange,
   zoomMode = "width", onZoomModeChange, logsOpen, onToggleLogs }: {
-  build: BuildView; canCompile: boolean; onCompile(): void; onCancel(): void; onConfigure?(): void;
+  build: BuildView; onConfigure?(): void;
   onReverse?(page: number, x: number, y: number): void;
   onPreviewCommit?(generation: number): void; onPreviewReject?(generation: number, message: string): void;
   target?: PdfTarget | null; zoom?: number; onZoomChange?(zoom: number): void;
   zoomMode?: PdfZoomMode; onZoomModeChange?(mode: PdfZoomMode): void;
   logsOpen?: boolean; onToggleLogs?(): void;
 }) {
-  const { preparing, running, action, summary } = previewPresentation(build.state);
+  const { summary } = previewPresentation(build.state);
   return <section className="preview-panel" aria-label="PDF 预览面板">
     <div className="preview-toolbar">
       <span className="preview-title"><Icon name="pdf" size={14} />PDF 预览</span>
       <div className="preview-actions">
-        <button className="compile-button" disabled={preparing || (!canCompile && !running)}
-          onClick={running ? onCancel : onCompile}
-          title={running ? "取消当前编译" : "编译当前文档"}>
-          <Icon name={running ? "close" : "play"} size={12} />{action}
-        </button>
         <button className="tool-button" aria-pressed={logsOpen} onClick={onToggleLogs}
           title="编译日志与诊断" aria-label="编译日志与诊断"><Icon name="terminal" size={16} /></button>
       </div>
     </div>
+    {build.pdf && ["failed", "timedOut", "cancelled", "unavailable"].includes(build.state) &&
+      <div className="pdf-render-status" role="status">本次未更新 · 显示上次成功的 PDF</div>}
     <div className="preview-stage">
       {(build.candidate?.pdf ?? build.pdf) ? <PdfCanvas data={(build.candidate?.pdf ?? build.pdf)!}
         onReverse={(build.candidate?.syncTexAvailable ?? build.syncTexAvailable) ? onReverse : undefined}

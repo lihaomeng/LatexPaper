@@ -5,6 +5,7 @@ import type { LayoutPreset } from "./useWorkbenchLayout";
 export function WorkbenchHeader(props: {
   projectName: string; local: boolean; busy: boolean; canOpen: boolean; canExport: boolean;
   recent: { id: string; name: string }[]; preset: LayoutPreset; preview: boolean;
+  compileAction: string; compileRunning: boolean; compileDisabled: boolean; compileReason: string; onCompile(): void;
   onOpen(id?: string): void; onSave(): void; onExport(): void; onRefresh(): void;
   onSettings(): void; onHelp(): void; onPreset(value: LayoutPreset): void; onPreview(value: boolean): void;
 }) {
@@ -32,6 +33,12 @@ export function WorkbenchHeader(props: {
       <button className="header-action" onClick={props.onSave} title={props.local ? "保存文件 (Ctrl+S)" : "缓存草稿 (Ctrl+S)"}>
         <Icon name="save" size={15} /><span>保存</span>
       </button>
+      <span title={props.compileRunning ? "取消当前编译" : props.compileReason || "编译当前文档 (Ctrl+Enter)"}>
+        <button className="compile-button" disabled={props.compileDisabled} onClick={props.onCompile}
+          aria-label={props.compileDisabled && props.compileReason ? props.compileReason : props.compileAction}>
+          <Icon name={props.compileRunning ? "close" : "play"} size={16} />{props.compileAction}
+        </button>
+      </span>
     </div>
     <div className="topbar-right">
       <ActionMenu className="align-right" title="工作区布局" label={<><Icon name="split" size={15} /><span>布局</span><span className="menu-chevron">⌄</span></>}>

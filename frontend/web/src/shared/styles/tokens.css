@@ -1,0 +1,12 @@
+:root {
+  --surface-base: #1d232c;
+  --surface-raised: #252e39;
+  --surface-subtle: #191f27;
+  --surface-editor: #1e242d;
+  --text-primary: #e0e7ef;
+  --text-secondary: #b0becc;
+  --accent: #8fbe9c;
+  --focus: #79b68a;
+  --border-subtle: #35414d;
+  --radius-control: 4px;
+}
