@@ -1,7 +1,9 @@
 param(
     [ValidateSet('core-debug','core-release','desktop-debug','desktop-release','--dev')][string]$Preset = 'core-debug',
     [Alias('-dev')][switch]$Dev,
-    [string]$MiKTeXRoot
+    [string]$MiKTeXRoot,
+    [switch]$RefreshRuntime,
+    [switch]$FreshConfigure
 )
 $ErrorActionPreference = 'Stop'
 if ($Preset -eq '--dev') { $Dev = $true; $Preset = 'desktop-release' }
@@ -14,7 +16,12 @@ try {
     if ($Dev -and -not $PSBoundParameters.ContainsKey('Preset')) { $Preset = 'desktop-release' }
     $testing = if ($Dev) { 'OFF' } else { 'ON' }
     $devMode = if ($Dev) { 'ON' } else { 'OFF' }
-    & cmake --preset $Preset "-DBUILD_TESTING=$testing" "-DLIGHTOVERLEAF_DEV_BUILD=$devMode"
+    $configureArguments = @('--preset', $Preset, "-DBUILD_TESTING=$testing", "-DLIGHTOVERLEAF_DEV_BUILD=$devMode")
+    if ($FreshConfigure) {
+        Write-Host 'Fresh configure requested: CMake cache options will be reset to preset defaults.'
+        $configureArguments += '--fresh'
+    }
+    & cmake @configureArguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & cmake --build --preset $Preset
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -31,7 +38,11 @@ try {
             if (!$dependencyLine) { throw 'Cannot resolve LIGHTOVERLEAF_THIRDPARTY_ROOT; specify -MiKTeXRoot.' }
             $MiKTeXRoot = Join-Path ($dependencyLine -replace '^[^=]+=', '') 'miktex'
         }
-        & (Join-Path $PSScriptRoot 'deploy-miktex.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtimeDirectory 'runtime/miktex')
+        if ($Dev) {
+            & (Join-Path $PSScriptRoot 'ensure-dev-runtime.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtimeDirectory 'runtime/miktex') -Refresh:$RefreshRuntime
+        } else {
+            & (Join-Path $PSScriptRoot 'deploy-miktex.ps1') -Source $MiKTeXRoot -Destination (Join-Path $runtimeDirectory 'runtime/miktex')
+        }
         $application = Join-Path $runtimeDirectory 'LightOverLeaf.exe'
         Write-Host ''
         Write-Host 'BUILD SUCCEEDED - double-click this EXE to start:' -ForegroundColor Green

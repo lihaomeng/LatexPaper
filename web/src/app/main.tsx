@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AuthoringRpcClient, ExportRpcClient, createNativeConnection, createSystemConnection, createStartupEvents,
-  payloadSmokeProbe, PreferencesSessionRpcClient, WorkspaceRpcClient, type Preferences } from "../native-api";
+import { createStartupEvents, payloadSmokeProbe, type Preferences } from "../native-api";
 import type { SessionSnapshot } from "../native-api";
 import type { WorkspaceStateResponseResult, WorkspaceTrashListResponseResultEntriesItem } from "../../.generated/rpc/protocol";
 import { EditorSession, EditorSurface, type EditorCommands } from "../features/editor";
@@ -18,15 +17,12 @@ import { reconcileWorkspaceRefresh } from "./refreshLocalWorkspace";
 import { containsMergeMarkers, mergeDocumentText } from "./threeWayMerge";
 import { validWorkspaceDirectoryId } from "./workspacePaths";
 import "./style.css";
-import { nextBuildGeneration, buildErrorMessage } from "./buildRequest";
+import { CompileController } from "./compileController";
+import { prepareWorkspaceSession } from "./prepareWorkspaceSession";
+import { createNativeServices } from "./nativeServices";
 
-const connection = createNativeConnection(import.meta.env.DEV);
-const systemConnection = createSystemConnection(import.meta.env.DEV);
-const workspaceConnection = new WorkspaceRpcClient(systemConnection);
-const workspaceOpenConnection = new WorkspaceRpcClient(createSystemConnection(import.meta.env.DEV, 305000));
-const authoringConnection = new AuthoringRpcClient(createSystemConnection(import.meta.env.DEV, 365000));
-const exportConnection = new ExportRpcClient(createSystemConnection(import.meta.env.DEV, 305000));
-const preferencesSessionConnection = new PreferencesSessionRpcClient(createSystemConnection(import.meta.env.DEV));
+const { connection, systemConnection, workspaceConnection, workspaceOpenConnection,
+  authoringConnection, exportConnection, preferencesSessionConnection } = createNativeServices(import.meta.env.DEV);
 const defaultPreferences: Preferences = { texRoot: "", engine: "pdflatex", timeoutMs: 120000, compileMode: "live" };
 const labels: Record<CacheStatus, string> = { loading: "正在读取草稿", pending: "有待缓存修改", saving: "正在缓存草稿", saved: "草稿已缓存", error: "草稿缓存失败" };
 function Tool({ icon, label, onClick, pressed, disabled }: { icon: IconName; label: string; onClick(): void; pressed?: boolean; disabled?: boolean }) {
@@ -71,6 +67,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   const [searchBusy, setSearchBusy] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [buildView, setBuildView] = useState<BuildView>({ state: "idle", output: "", diagnostics: [] });
+  const [compileController] = useState(() => new CompileController(authoringConnection, setBuildView));
   const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
   const [preferencesDraft, setPreferencesDraft] = useState<Preferences>(defaultPreferences);
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>([]);
@@ -87,8 +84,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     } catch { return {}; }
   });
   const restoredSession = useRef<SessionSnapshot | null>(null);
-  const activeBuildJob = useRef<string | null>(null);
-  const buildSequence = useRef(0);
+
 
   const lastAutoCompileRevision = useRef(0);
   const lastSaveRequestedRevision = useRef(0);
@@ -202,7 +198,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     ++documentOpenSequence.current;
     ++recoverySequence.current;
     ++refreshSequence.current;
-    ++buildSequence.current;
+    void compileController.invalidate(false).catch(() => {});
     saveDeferred.current = false;
     const current = localSessionRef.current;
     localSessionRef.current = null;
@@ -442,36 +438,23 @@ const openWorkspace = async (workspaceId?: string) => {
       return;
     }
     ++documentOpenSequence.current;
-    ++buildSequence.current;
     switchingWorkspace.current = true;
     setWorkspaceBusy(true); setLocalError("");
     let openedWorkspace = false;
     let pendingSession: EditorSession | null = null;
     try {
-      if (activeBuildJob.current) {
-        await authoringConnection.cancel(activeBuildJob.current);
-        activeBuildJob.current = null;
-        setBuildView(current => ({ ...current, state: 'cancelled' }));
-      }
+      await compileController.invalidate();
       const openedProject = workspaceId ? await workspaceOpenConnection.reopen(workspaceId) : await workspaceOpenConnection.open();
       openedWorkspace = true;
-      const candidates = openedProject.entries.filter(entry => !entry.directory && /\.(tex|bib|md|txt)$/i.test(entry.fileId));
-      const first = candidates.find(entry => entry.fileId.toLowerCase() === "main.tex") ?? candidates[0];
-      const next = new EditorSession({ files: [], open: [], active: null });
+      const prepared = await prepareWorkspaceSession(openedProject, workspaceConnection, restoredSession.current);
+      const next = prepared.session;
       pendingSession = next;
-      const nextRevisions = new Map<string, string>();
-      const previous = restoredSession.current?.workspaceRoot === openedProject.workspaceId ? restoredSession.current : null;
-      const available = new Set(candidates.map(entry => entry.fileId));
-      const requested = previous?.openFiles.filter(file => available.has(file)) ?? [];
-      const filesToOpen = requested.length ? requested : first ? [first.fileId] : [];
-      for (const fileId of filesToOpen) {
-        const document = await workspaceConnection.openDocument(fileId);
-        next.load(document.fileId, document.content);
-        nextRevisions.set(document.fileId, document.revision);
-      }
-      if (previous?.activeFile && next.model(previous.activeFile)) next.activate(previous.activeFile);
-      if (previous?.activeFile && next.model(previous.activeFile))
-        window.setTimeout(() => editor.current?.reveal(previous.activeLine, previous.activeColumn));
+      const nextRevisions = prepared.revisions;
+      if (prepared.restoreCursor)
+        window.setTimeout(() => {
+          if (localSessionRef.current === next)
+            editor.current?.reveal(prepared.restoreCursor!.line, prepared.restoreCursor!.column);
+        });
       restoredSession.current = null;
       localSessionRef.current?.dispose();
       localSessionRef.current = next;
@@ -565,7 +548,7 @@ const openWorkspace = async (workspaceId?: string) => {
   const compileCurrent = async () => {
     const compileSession = localSession ?? draftSession;
     const compileProject = project;
-    if (conflictRef.current || refreshInFlight.current) return;
+    if (!nativeBuild || workspaceBusy || switchingWorkspace.current || mutationBusy.current || conflictRef.current || refreshInFlight.current) return;
 
     const generation = compileSession.capture();
     const captured = generation.snapshot;
@@ -582,61 +565,11 @@ const openWorkspace = async (workspaceId?: string) => {
     const overlayFiles = captured.files.map(file =>
       ({ fileId: file.path, content: file.content }));
     lastAutoCompileRevision.current = Math.max(lastAutoCompileRevision.current, generation.revision);
-    const sequence = ++buildSequence.current;
-    const isCurrent = () => sequence === buildSequence.current && (compileProject ?
-      localSessionRef.current === compileSession : localSessionRef.current === null);
-    let logTimer: number | undefined;
-    try {
-      const requestGeneration = nextBuildGeneration();
-      setBuildView(current => ({ ...current, state: "detecting", output: "", diagnostics: [], candidate: undefined, phase: "detect", generation: requestGeneration }));
-      const detected = await authoringConnection.detect();
-      if (!isCurrent()) return;
-      const engine = detected.toolchains.flatMap(item => item.engines)
-        .find(item => item === preferences.engine) ?? detected.toolchains[0]?.engines[0];
-      if (!engine) {
-        setBuildView(current => ({ ...current, state: "unavailable",
-          output: "未找到可用的 TeX 引擎，尚未启动编译，因此没有 TeX 日志。请确认应用旁已部署完整 runtime/miktex；开发构建请重新运行 build.ps1 --dev。不会自动下载宏包。",
-          diagnostics: [], candidate: undefined, phase: "detect", generation: requestGeneration }));
-        return;
-      }
-      const token = crypto.randomUUID();
-      const jobId = "job-" + token;
-      activeBuildJob.current = jobId;
-      setBuildView(current => ({ ...current, state: "running", output: "", diagnostics: [], phase: "snapshot", generation: requestGeneration }));
-      logTimer = window.setInterval(() => {
-        void authoringConnection.status(jobId).then(status => {
-          if (!isCurrent() || status.state !== "running") return;
-          setBuildView(current => ({ ...current, state: "running",
-            output: status.output + (status.outputTruncated ? "\n[日志已截断]" : ""),
-            phase: status.phase, generation: status.generation }));
-        }).catch(() => {});
-      }, 200);
-      const result = await authoringConnection.build(jobId, "snapshot-" + token,
-        mainFileId, engine, preferences.timeoutMs, overlayFiles,
-        compileProject?.workspaceId ?? draftId, requestGeneration);
-      if (!isCurrent()) return;
-      const state: BuildView["state"] = result.terminal === "compilerUnavailable" ? "unavailable" : result.terminal;
-      const output = result.output + (result.outputTruncated ? "\n[日志已截断]" : "");
-      const diagnostics = result.diagnostics.map(item =>
-        ({ fileId: item.fileId, line: item.line, message: item.message }));
-      if (result.artifactId) {
-        const pdf = await authoringConnection.readPdf(result.artifactId);
-        if (!isCurrent()) return;
-        setBuildView(current => ({ ...current, state: "rendering", output, diagnostics,
-          candidate: { generation: result.generation, artifactId: result.artifactId, pdf,
-            syncTexAvailable: result.syncTexAvailable }, generation: result.generation, phase: "render" }));
-      } else {
-        setBuildView(current => ({ ...current, state, output, diagnostics, candidate: undefined, generation: result.generation, phase: result.phase }));
-      }
-    } catch (failure) {
-      if (isCurrent())
-        setBuildView(current => ({ ...current,
-          state: (failure as Error).message === "RPC_CANCELLED" ? "cancelled" : "failed",
-          output: buildErrorMessage((failure as Error).message), diagnostics: [], candidate: undefined }));
-    } finally {
-      if (logTimer !== undefined) window.clearInterval(logTimer);
-      if (sequence === buildSequence.current) activeBuildJob.current = null;
-    }
+    await compileController.run({ mainFileId, files: overlayFiles,
+      scopeId: compileProject?.workspaceId ?? draftId,
+      engine: preferences.engine, timeoutMs: preferences.timeoutMs },
+      () => !switchingWorkspace.current &&
+        (compileProject ? localSessionRef.current === compileSession : localSessionRef.current === null));
   };
   const requestCompile = () => {
     if (workspaceBusy || refreshInFlight.current) {
@@ -654,35 +587,35 @@ const openWorkspace = async (workspaceId?: string) => {
     void compileCurrent();
   };
   useEffect(() => {
-    if (preferences.compileMode !== "live" || localSession || !view.active ||
+    if (workspaceBusy || !nativeBuild || preferences.compileMode !== "live" || localSession || !view.active ||
         view.revision <= lastAutoCompileRevision.current) return;
     const revision = view.revision;
     const timer = window.setTimeout(() => {
       if (localSessionRef.current || draftSession.getView().revision !== revision) return;
-      lastAutoCompileRevision.current = revision;
+
       void compileCurrent();
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [buildView.state, draftSession, localSession, preferences.compileMode, view.active, view.revision]);
+  }, [workspaceBusy, nativeBuild, buildView.state, draftSession, localSession, preferences.compileMode, view.active, view.revision]);
   useEffect(() => {
-    if (preferences.compileMode !== "live" || !localSession || !project ||
+    if (workspaceBusy || !nativeBuild || preferences.compileMode !== "live" || !localSession || !project ||
         conflictRef.current || view.revision <= lastAutoCompileRevision.current) return;
     const revision = view.revision;
     const timer = window.setTimeout(() => {
       if (localSessionRef.current !== localSession || localSession.getView().revision !== revision) return;
-      lastAutoCompileRevision.current = revision;
+
       void compileCurrent();
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [activeStatus, buildView.state, localSession, preferences.compileMode, project, view.revision]);
+  }, [workspaceBusy, nativeBuild, activeStatus, buildView.state, localSession, preferences.compileMode, project, view.revision]);
   useEffect(() => {
     const requested = lastSaveRequestedRevision.current;
-    if (preferences.compileMode !== "onSave" || activeStatus !== "saved" || !view.active ||
+    if (workspaceBusy || !nativeBuild || preferences.compileMode !== "onSave" || activeStatus !== "saved" || !view.active ||
         !requested || requested > view.revision || requested <= lastAutoCompileRevision.current) return;
     lastSaveRequestedRevision.current = 0;
-    lastAutoCompileRevision.current = requested;
+
     void compileCurrent();
-  }, [activeStatus, buildView.state, preferences.compileMode, view.active, view.revision]);
+  }, [workspaceBusy, nativeBuild, activeStatus, buildView.state, preferences.compileMode, view.active, view.revision]);
   const forwardSync = async () => {
     if (!buildView.artifactId || !buildView.syncTexAvailable || !view.active) return;
     try {
@@ -695,9 +628,7 @@ const openWorkspace = async (workspaceId?: string) => {
     }
   };
   const cancelBuild = async () => {
-    const jobId = activeBuildJob.current;
-    if (!jobId) return;
-    try { await authoringConnection.cancel(jobId); }
+    try { await compileController.cancel(); }
     catch (failure) { setLocalError("取消编译失败：" + (failure as Error).message); }
   };
   const openSettings = () => {
