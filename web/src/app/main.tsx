@@ -1,11 +1,15 @@
+import { useLocalWorkspace } from "./workflows/useLocalWorkspace";
+import { useDocumentPersistence } from "./workflows/useDocumentPersistence";
+import { useConflictRecovery } from "./workflows/useConflictRecovery";
+import { ConflictForm } from "./layout/ConflictForm";
 import { useProjectSearch } from "./useProjectSearch";
 import { useWorkbenchSettings } from "./useWorkbenchSettings";
 import { SettingsForm } from "./layout/SettingsForm";
 import { createRoot } from "react-dom/client";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createStartupEvents, payloadSmokeProbe } from "../native-api";
 import type { SessionSnapshot } from "../native-api";
-import type { WorkspaceStateResponseResult, WorkspaceTrashListResponseResultEntriesItem } from "../../.generated/rpc/protocol";
+import type { WorkspaceTrashListResponseResultEntriesItem } from "../../.generated/rpc/protocol";
 import { EditorSession, EditorSurface, type EditorCommands } from "../features/editor";
 import { Explorer } from "../features/explorer";
 import { PreviewPanel, BuildLogPanel, useBuildFeedback, type BuildView, type PdfTarget } from "../features/preview";
@@ -17,16 +21,11 @@ import { WorkbenchHeader } from "./layout/WorkbenchHeader";
 import { OutlinePanel } from "./layout/OutlinePanel";
 import { useWorkbenchLayout } from "./layout/useWorkbenchLayout";
 import { useDraftWorkspace, type CacheStatus } from "./useDraftWorkspace";
-import { LocalDocumentSaveError, saveLocalDocuments } from "./saveLocalDocuments";
-import { adoptDiskVersion, compareDocument, type DocumentComparison } from "./documentRecovery";
-import { saveConflictCopy } from "./saveConflictCopy";
-import { reconcileWorkspaceRefresh } from "./refreshLocalWorkspace";
-import { containsMergeMarkers, mergeDocumentText } from "./threeWayMerge";
 import { validWorkspaceDirectoryId } from "./workspacePaths";
 import "./style.css";
 import "./layout/workbench.css";
 import { CompileController } from "./compileController";
-import { prepareWorkspaceSession } from "./prepareWorkspaceSession";
+import { useWorkspaceSwitch } from "./workflows/useWorkspaceSwitch";
 import { createNativeServices } from "./nativeServices";
 
 const { connection, systemConnection, workspaceConnection, workspaceOpenConnection,
@@ -38,36 +37,17 @@ function Tool({ icon, label, onClick, pressed, disabled }: { icon: IconName; lab
 function Workbench({ session: draftSession, status, error, save: saveDraft, draftId }: {
   session: EditorSession; status: CacheStatus; error: string; save(): void; draftId: string;
 }) {
-  const [localSession, setLocalSession] = useState<EditorSession | null>(null);
-  const localSessionRef = useRef<EditorSession | null>(null);
-  const [project, setProject] = useState<WorkspaceStateResponseResult | null>(null);
-  const revisions = useRef(new Map<string, string>());
-  const [localStatus, setLocalStatus] = useState<CacheStatus>("saved");
-  const [localError, setLocalError] = useState("");
-  const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const workspace = useLocalWorkspace();
+  const { localSession, localSessionRef, project, setProject, revisions, localStatus, setLocalStatus, localError,
+    setLocalError, workspaceBusy, setWorkspaceBusy, documentOpenSequence, saveInFlight, conflictRef, conflictFile,
+    refreshInFlight, refreshDeferred, mutationBusy, switchingWorkspace, selectedDirectory, setSelectedDirectory } =
+    workspace;
   const [nativeFiles, setNativeFiles] = useState(false);
   const [nativeBuild, setNativeBuild] = useState(false);
-  const documentOpenSequence = useRef(0);
-  const saveInFlight = useRef(false);
-  const saveDeferred = useRef(false);
-  const conflictRef = useRef<string | null>(null);
-  const [conflictFile, setConflictFile] = useState<string | null>(null);
-  const [comparison, setComparison] = useState<DocumentComparison | null>(null);
-  const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const [recoveryError, setRecoveryError] = useState("");
-  const [conflictCopyPath, setConflictCopyPath] = useState("");
-  const [mergeDraft, setMergeDraft] = useState("");
-  const [mergeConflicts, setMergeConflicts] = useState(0);
-  const recoverySequence = useRef(0);
-  const refreshInFlight = useRef(false);
-  const refreshSequence = useRef(0);
-  const refreshDeferred = useRef(false);
-  const mutationBusy = useRef(false);
   const [fileOperation, setFileOperation] = useState<'create' | 'rename' | 'remove'>('create');
   const [operationSource, setOperationSource] = useState('');
   const [directoryOperation, setDirectoryOperation] = useState<'create' | 'rename' | 'remove'>('create');
   const [directorySource, setDirectorySource] = useState('');
-  const [selectedDirectory, setSelectedDirectory] = useState<string | null>(null);
   const [trashEntries, setTrashEntries] = useState<WorkspaceTrashListResponseResultEntriesItem[]>([]);
   const { query: projectQuery, setQuery: setProjectQuery, hits: searchHits,
     busy: searchBusy, error: searchError, run: runProjectSearch, reset: resetProjectSearch } =
@@ -79,7 +59,6 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     busy: settingsBusy, error: settingsError, setError: setSettingsError } = settings;
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>([]);
   const [sessionReady, setSessionReady] = useState(false);
-  const switchingWorkspace = useRef(false);
   const [projectNames, setProjectNames] = useState<Record<string, string>>(() => {
     try {
       const parsed: unknown = JSON.parse(localStorage.getItem('lightoverleaf.projectNames') ?? '{}');
@@ -119,100 +98,32 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   const activeStatus = conflictFile ? "error" : localSession ? localStatus : status;
   const activeError = conflictFile ? `${conflictFile} 已被外部修改，自动保存已暂停。请对比版本后处理。` : localError || (localSession ? "" : error);
   const hasChanges = localSession ? view.files.some(file => file.dirty) || saveInFlight.current : activeStatus !== "saved";
-  const save = useCallback(() => {
-    lastSaveRequestedRevision.current = view.revision;
-    if (!localSession) { saveDraft(); return; }
-    if (refreshInFlight.current) { saveDeferred.current = true; return; }
-    if (mutationBusy.current || conflictRef.current || saveInFlight.current || !localSession.getView().files.some(file => file.dirty)) return;
-    saveDeferred.current = false;
-    saveInFlight.current = true;
-    setLocalStatus("saving"); setLocalError("");
-    void saveLocalDocuments(localSession, revisions.current, workspaceConnection,
-      () => localSessionRef.current === localSession).then(() => {
-      if (localSessionRef.current !== localSession) return;
-      setLocalStatus(localSession.getView().files.some(item => item.dirty) ? "pending" : "saved");
-    }).catch(failure => {
-      if (localSessionRef.current !== localSession) return;
-      const code = (failure as Error).message;
-      if (failure instanceof LocalDocumentSaveError && code === "FILE_CONFLICT") {
-        conflictRef.current = failure.fileId;
-        setConflictFile(failure.fileId);
-      }
-      setLocalStatus("error");
-      setLocalError(code === "FILE_CONFLICT" ? "文件已被外部修改，请使用对比版本处理冲突。" :
-        "保存本地文件失败：" + code);
-    }).finally(() => { saveInFlight.current = false; });
-  }, [localSession, saveDraft, view.revision]);
-  const refreshWorkspace = useCallback(async () => {
-    if (!localSession || !project || workspaceBusy || refreshInFlight.current || mutationBusy.current ||
-        saveInFlight.current || conflictRef.current) return;
-    refreshInFlight.current = true;
-    const sequence = ++refreshSequence.current;
-    const isCurrent = () => localSessionRef.current === localSession && sequence === refreshSequence.current;
-    try {
-      const next = await workspaceConnection.refresh();
-      if (!isCurrent() || next.workspaceId !== project.workspaceId) return;
-      if (next.revision === project.revision && !refreshDeferred.current) return;
-      const summary = await reconcileWorkspaceRefresh(localSession, revisions.current, next,
-        workspaceConnection, isCurrent);
-      if (!isCurrent()) return;
-      refreshDeferred.current = summary.deferred > 0;
-      setProject(next);
-      setSelectedDirectory(current => current &&
-        next.entries.some(entry => entry.directory && entry.fileId === current) ? current : null);
-      const dirty = localSession.getView().files.some(file => file.dirty);
-      setLocalStatus(dirty ? "pending" : "saved");
-      setLocalError(summary.deferred ? `磁盘目录已刷新；${summary.deferred} 个并发编辑文件保持原内容。` :
-        `磁盘目录已刷新：重载 ${summary.reloaded} 个，关闭已删除 ${summary.removed} 个。`);
-    } catch (failure) {
-      if (isCurrent()) setLocalError((failure as Error).message === "STALE_WORKSPACE" ?
-        "刷新期间项目状态已变化，本次结果已忽略。" : "刷新本地项目失败：" + (failure as Error).message);
-    } finally {
-      if (sequence === refreshSequence.current) {
-        refreshInFlight.current = false;
-        if (saveDeferred.current && localSessionRef.current === localSession) void save();
-      }
-    }
-  }, [localSession, project, save, workspaceBusy]);
-  useEffect(() => {
-    if (!localSession) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = localSession.subscribe(() => {
-      if (conflictRef.current) return;
-      if (!localSession.getView().files.some(file => file.dirty)) return;
-      setLocalStatus("pending");
-      clearTimeout(timer);
-      timer = setTimeout(save, 600);
-    });
-    return () => { clearTimeout(timer); unsubscribe(); };
-  }, [localSession, save]);
-  useEffect(() => {
-    if (!localSession || !project) return;
-    let polling = false;
-    const timer = window.setInterval(() => {
-      if (polling || document.visibilityState !== "visible") return;
-      polling = true;
-      void workspaceConnection.pollChanges(project.workspaceId)
-        .then(changed => { if (changed) void refreshWorkspace(); })
-        .catch(() => { refreshDeferred.current = true; })
-        .finally(() => { polling = false; });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [localSession, project, refreshWorkspace]);
-  useEffect(() => {
-    if (modal !== "conflict") return;
-    return () => { ++recoverySequence.current; };
-  }, [modal]);
-  useEffect(() => () => {
-    ++documentOpenSequence.current;
-    ++recoverySequence.current;
-    ++refreshSequence.current;
-    void compileController.invalidate(false).catch(() => {});
-    saveDeferred.current = false;
-    const current = localSessionRef.current;
-    localSessionRef.current = null;
-    current?.dispose();
-  }, []);
+  const { save, refreshWorkspace } = useDocumentPersistence(workspace, workspaceConnection, {
+    saveDraft, revision: view.revision, lastSaveRequestedRevision,
+  });
+  const recovery = useConflictRecovery(workspace, workspaceConnection, {
+    open: modal === "conflict", onOpen: () => setModal("conflict"), onClose: () => setModal(null), save,
+  });
+  const { inspectConflict } = recovery;
+  useEffect(() => () => { void compileController.invalidate(false).catch(() => {}); }, []);
+  const openWorkspace = useWorkspaceSwitch(workspace, workspaceConnection, workspaceOpenConnection, {
+    nativeFiles, restoredSession, beforeOpen: () => compileController.invalidate(),
+    onReveal: (line, column) => editor.current?.reveal(line, column),
+    onClosed: () => { setBuildView({ state: 'idle', output: '', diagnostics: [] }); setPdfTarget(null); },
+    onOpened: (openedProject, next) => {
+      lastAutoCompileRevision.current = next.getView().revision;
+      setFilter(""); setModal(null);
+      setRecentWorkspaces(current => [openedProject.workspaceId, ...current.filter(id => id !== openedProject.workspaceId)].slice(0, 20));
+      setProjectNames(current => {
+        const names = { ...current, [openedProject.workspaceId]: openedProject.displayName };
+        try { localStorage.setItem('lightoverleaf.projectNames', JSON.stringify(names)); } catch { /* Optional display cache. */ }
+        return names;
+      });
+      resetProjectSearch();
+      setBuildView({ state: "idle", output: "", diagnostics: [] });
+      setPdfTarget(null); setSelectedDirectory(null); setOutlineLine(null);
+    },
+  });
   useEffect(() => {
     let active = true;
     let connectionFailed = false;
@@ -310,107 +221,6 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
     dialog?.addEventListener("keydown", trap);
     return () => { dialog?.removeEventListener("keydown", trap); if (previous?.isConnected) previous.focus(); };
   }, [modal]);
-  const inspectConflict = async () => {
-    if (!localSession || !conflictRef.current || saveInFlight.current) return;
-    const sequence = ++recoverySequence.current;
-    const fileId = conflictRef.current;
-    setModal("conflict"); setComparison(null); setRecoveryError(""); setRecoveryBusy(true);
-    const isCurrent = () => localSessionRef.current === localSession && sequence === recoverySequence.current;
-    try {
-      const result = await compareDocument(localSession, fileId, workspaceConnection, isCurrent);
-      if (isCurrent()) {
-        setComparison(result);
-        const merged = mergeDocumentText(result.baseContent, result.localContent, result.diskContent);
-        setMergeDraft(merged.content); setMergeConflicts(merged.conflicts);
-        const extension = result.fileId.lastIndexOf('.');
-        setConflictCopyPath(extension > result.fileId.lastIndexOf('/') ?
-          result.fileId.slice(0, extension) + '-副本' + result.fileId.slice(extension) :
-          result.fileId + '-副本.tex');
-      }
-    } catch (failure) {
-      if (isCurrent()) setRecoveryError((failure as Error).message === "STALE_DOCUMENT"
-        ? "读取期间编辑内容已变化，请重新读取对比。" : "读取磁盘版本失败：" + (failure as Error).message);
-    } finally { if (localSessionRef.current === localSession) setRecoveryBusy(false); }
-  };
-  const acceptDisk = () => {
-    if (!localSession || !comparison || recoveryBusy || saveInFlight.current) return;
-    try {
-      adoptDiskVersion(localSession, comparison, revisions.current,
-        () => localSessionRef.current === localSession && conflictRef.current === comparison.fileId);
-      conflictRef.current = null; setConflictFile(null); setComparison(null); setModal(null); setLocalError("");
-      setLocalStatus(localSession.getView().files.some(file => file.dirty) ? "pending" : "saved");
-      save();
-    } catch {
-      setComparison(null); setRecoveryError("编辑内容已变化，未替换任何内容。请重新读取对比。");
-    }
-  };
-  const applyMerge = () => {
-    if (!localSession || !comparison || recoveryBusy) return;
-    if (containsMergeMarkers(mergeDraft)) {
-      setRecoveryError('合并内容仍包含冲突标记，请处理全部标记后再应用。'); return;
-    }
-    if (!localSession.replaceForMerge(comparison.fileId, mergeDraft, comparison.localVersion)) {
-      setComparison(null); setRecoveryError('编辑内容已变化，未应用合并结果。请重新读取对比。'); return;
-    }
-    revisions.current.set(comparison.fileId, comparison.diskRevision);
-    conflictRef.current = null; setConflictFile(null); setComparison(null); setModal(null);
-    setLocalError('三方合并已应用到编辑器，正在保存到最新磁盘版本。'); setLocalStatus('pending');
-    window.setTimeout(save, 0);
-  };
-  const saveConflictAs = async () => {
-    if (!localSession || !comparison || recoveryBusy || mutationBusy.current) return;
-    if (!validDraftPath(conflictCopyPath) ||
-        conflictCopyPath.toLowerCase() === comparison.fileId.toLowerCase()) {
-      setRecoveryError('请输入不同于原文件的有效 .tex、.bib、.md 或 .txt 相对路径。'); return;
-    }
-    const sequence = ++recoverySequence.current;
-    const isCurrent = () => localSessionRef.current === localSession &&
-      conflictRef.current === comparison.fileId && sequence === recoverySequence.current;
-    mutationBusy.current = true; setRecoveryBusy(true); setRecoveryError('');
-    let committed = false;
-    try {
-      const result = await saveConflictCopy(
-        localSession, comparison, conflictCopyPath, workspaceConnection, isCurrent);
-      committed = true;
-      if (result.canRetireSource && isCurrent()) {
-        if (localSession.renameSaved(result.sourceFileId, result.destinationFileId,
-          result.sourceVersion)) {
-          revisions.current.set(result.destinationFileId, result.revision);
-          revisions.current.delete(result.sourceFileId);
-          conflictRef.current = null; setConflictFile(null); setComparison(null); setModal(null);
-          setLocalStatus('saved'); setLocalError('编辑内容已原子另存为 ' + result.destinationFileId +
-            '；原文件的外部版本保持不变。');
-        } else {
-          setRecoveryError('副本已保存，但编辑模型已变化；原编辑保持不变。请从文件树打开副本。');
-        }
-      } else if (localSessionRef.current === localSession) {
-        setRecoveryError('副本已保存，但原编辑或会话已变化；原编辑保持不变。请从文件树打开副本。');
-      }
-      try {
-        const next = await workspaceConnection.refresh();
-        if (localSessionRef.current === localSession) {
-          setProject(next);
-          refreshDeferred.current = true;
-        }
-      } catch (failure) {
-        if (localSessionRef.current === localSession)
-          setLocalError('副本已保存，但刷新文件树失败：' + (failure as Error).message);
-      }
-    } catch (failure) {
-      if (isCurrent()) {
-        const code = (failure as Error).message;
-        setRecoveryError(code === 'FILE_CONFLICT' ? '目标文件已经存在，未覆盖任何内容。' :
-          code === 'STALE_DOCUMENT' ? '编辑内容已变化，请重新读取对比后再另存。' :
-          code === 'UNCONFIRMED_COMMIT' ? '原生返回与目标不一致，提交状态无法确认；请刷新文件树检查。' :
-          '另存副本失败：' + code);
-      } else if (committed && localSessionRef.current === localSession) {
-        setLocalError('副本已提交，但当前会话已经变化；请刷新文件树确认。');
-      }
-    } finally {
-      mutationBusy.current = false;
-      if (localSessionRef.current === localSession) setRecoveryBusy(false);
-    }
-  };
   const openTrash = async () => {
     if (!project || workspaceBusy || mutationBusy.current) return;
     setWorkspaceBusy(true); setFileError('');
@@ -438,68 +248,6 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       setFileError(code === 'FILE_CONFLICT' ? '原路径已有同名内容，未覆盖。请先重命名现有条目。' :
         '恢复失败：' + code);
     } finally { mutationBusy.current = false; setWorkspaceBusy(false); }
-  };
-const openWorkspace = async (workspaceId?: string) => {
-    if (!nativeFiles || workspaceBusy || switchingWorkspace.current || mutationBusy.current || refreshInFlight.current) return;
-    ++refreshSequence.current;
-    if (localSession && (conflictRef.current || saveInFlight.current || localSession.getView().files.some(file => file.dirty))) {
-      setLocalError("当前项目仍有未保存修改，请保存成功后再切换项目。");
-      return;
-    }
-    ++documentOpenSequence.current;
-    switchingWorkspace.current = true;
-    setWorkspaceBusy(true); setLocalError("");
-    let openedWorkspace = false;
-    let pendingSession: EditorSession | null = null;
-    try {
-      await compileController.invalidate();
-      const openedProject = workspaceId ? await workspaceOpenConnection.reopen(workspaceId) : await workspaceOpenConnection.open();
-      openedWorkspace = true;
-      const prepared = await prepareWorkspaceSession(openedProject, workspaceConnection, restoredSession.current);
-      const next = prepared.session;
-      pendingSession = next;
-      const nextRevisions = prepared.revisions;
-      if (prepared.restoreCursor)
-        window.setTimeout(() => {
-          if (localSessionRef.current === next)
-            editor.current?.reveal(prepared.restoreCursor!.line, prepared.restoreCursor!.column);
-        });
-      restoredSession.current = null;
-      localSessionRef.current?.dispose();
-      localSessionRef.current = next;
-      lastAutoCompileRevision.current = next.getView().revision;
-      revisions.current = nextRevisions;
-      refreshDeferred.current = false;
-      setProject(openedProject); setLocalSession(next); setLocalStatus("saved");
-      pendingSession = null;
-      setFilter(""); setModal(null);
-      setRecentWorkspaces(current => [openedProject.workspaceId, ...current.filter(id => id !== openedProject.workspaceId)].slice(0, 20));
-      setProjectNames(current => {
-        const names = { ...current, [openedProject.workspaceId]: openedProject.displayName };
-        try { localStorage.setItem('lightoverleaf.projectNames', JSON.stringify(names)); } catch { /* Optional display cache. */ }
-        return names;
-      });
-      resetProjectSearch();
-      setBuildView({ state: "idle", output: "", diagnostics: [] });
-      setPdfTarget(null); setSelectedDirectory(null); setOutlineLine(null);
-    } catch (failure) {
-      const code = (failure as Error).message;
-      if (!openedWorkspace && code !== "USER_CANCELLED" && project) {
-        try { openedWorkspace = (await workspaceConnection.getState()).workspaceId !== project.workspaceId; }
-        catch { openedWorkspace = true; }
-      }
-      if (openedWorkspace) {
-        await workspaceConnection.close().catch(() => {});
-        setBuildView({ state: 'idle', output: '', diagnostics: [] }); setPdfTarget(null);
-        localSessionRef.current?.dispose(); localSessionRef.current = null;
-        setLocalSession(null); setProject(null); setSelectedDirectory(null); revisions.current.clear();
-      }
-      if (code !== "USER_CANCELLED") setLocalError("打开本地项目失败：" + code + "。请点击打开项目重新选择文件夹；旧版本记录需重新选择一次。");
-    } finally {
-      pendingSession?.dispose();
-      switchingWorkspace.current = false;
-      setWorkspaceBusy(false);
-    }
   };
   const exportDraft = async () => {
     if (!nativeFiles || workspaceBusy) return;
@@ -924,31 +672,7 @@ const openWorkspace = async (workspaceId?: string) => {
           {fileError && <p role="alert" className="error">{fileError}</p>}
           <div className="modal-actions"><button type="button" onClick={() => setModal(null)}>取消</button>
             <button type="submit" className="primary" disabled={workspaceBusy}>{workspaceBusy ? '处理中…' : '确认'}</button></div>
-        </form> : modal === "conflict" ? <>
-          <p>{conflictFile}</p>
-          <p>关闭窗口会保留当前编辑。采用磁盘版本将替换编辑区内容，可通过撤销找回；不会写入磁盘。</p>
-          {recoveryBusy && <p role="status">正在读取磁盘版本…</p>}
-          {recoveryError && <p className="error" role="alert">{recoveryError}</p>}
-          {comparison && <div className="conflict-columns">
-            <label>当前编辑<textarea readOnly aria-label="当前编辑版本" value={comparison.localContent.slice(0, 32768)} /></label>
-            <label>磁盘版本<textarea readOnly aria-label="磁盘版本" value={comparison.diskContent.slice(0, 32768)} /></label>
-          </div>}
-          {comparison && <label className="merge-result">三方合并结果（{mergeConflicts ? `${mergeConflicts} 处待处理` : '可直接应用'}）
-            <textarea aria-label="三方合并结果" value={mergeDraft}
-              onChange={event => { setMergeDraft(event.target.value); setRecoveryError(''); }} />
-          </label>}
-          {comparison && Math.max(comparison.localContent.length, comparison.diskContent.length) > 32768 &&
-            <p>对比区仅显示前 32768 个字符；采用磁盘版本时使用完整内容。</p>}
-          {comparison && <><label htmlFor="conflict-copy-path">将当前编辑另存为</label>
-            <input id="conflict-copy-path" value={conflictCopyPath} disabled={recoveryBusy}
-              onChange={event => setConflictCopyPath(event.target.value)} maxLength={160} />
-            <p>另存采用原子非覆盖创建；目标已存在时不会写入。</p></>}
-          <div className="modal-actions"><button onClick={() => setModal(null)}>保留当前编辑</button>
-            <button disabled={recoveryBusy} onClick={() => void inspectConflict()}>重新读取对比</button>
-            <button disabled={!comparison || recoveryBusy} onClick={() => void saveConflictAs()}>另存副本</button>
-            <button disabled={!comparison || recoveryBusy} onClick={applyMerge}>应用合并</button>
-            <button className="primary" disabled={!comparison || recoveryBusy} onClick={acceptDisk}>采用磁盘版本</button></div>
-        </> : modal === "new" ? <form onSubmit={event => {
+        </form> : modal === "conflict" ? <ConflictForm recovery={recovery} conflictFile={conflictFile} onClose={() => setModal(null)} /> : modal === "new" ? <form onSubmit={event => {
           event.preventDefault();
           if (!validDraftPath(filename)) { setFileError("请输入有效相对路径，支持 .tex、.bib、.md、.txt，不能包含 .. 或反斜杠。"); return; }
           try { session.create(filename); setModal(null); } catch (failure) { setFileError((failure as Error).message); }
