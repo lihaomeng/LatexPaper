@@ -5,10 +5,14 @@ import type { SessionSnapshot } from "../native-api";
 import type { WorkspaceStateResponseResult, WorkspaceTrashListResponseResultEntriesItem } from "../../.generated/rpc/protocol";
 import { EditorSession, EditorSurface, type EditorCommands } from "../features/editor";
 import { Explorer } from "../features/explorer";
-import { PreviewPanel, type BuildView, type PdfTarget } from "../features/preview";
+import { PreviewPanel, BuildLogPanel, useBuildFeedback, type BuildView, type PdfTarget } from "../features/preview";
 import { validDraftPath } from "../features/session";
 import { Icon, type IconName } from "../shared/Icon";
 import { Splitter } from "../shared/Splitter";
+import { ActionMenu } from "../shared/ActionMenu";
+import { WorkbenchHeader } from "./layout/WorkbenchHeader";
+import { OutlinePanel } from "./layout/OutlinePanel";
+import { useWorkbenchLayout } from "./layout/useWorkbenchLayout";
 import { useDraftWorkspace, type CacheStatus } from "./useDraftWorkspace";
 import { LocalDocumentSaveError, saveLocalDocuments } from "./saveLocalDocuments";
 import { adoptDiskVersion, compareDocument, type DocumentComparison } from "./documentRecovery";
@@ -17,6 +21,7 @@ import { reconcileWorkspaceRefresh } from "./refreshLocalWorkspace";
 import { containsMergeMarkers, mergeDocumentText } from "./threeWayMerge";
 import { validWorkspaceDirectoryId } from "./workspacePaths";
 import "./style.css";
+import "./layout/workbench.css";
 import { CompileController } from "./compileController";
 import { prepareWorkspaceSession } from "./prepareWorkspaceSession";
 import { createNativeServices } from "./nativeServices";
@@ -94,12 +99,15 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   const editor = useRef<EditorCommands>(null);
   const [native, setNative] = useState<"pending" | "ready" | "error">("pending");
   const [editorReady, setEditorReady] = useState(false);
-  const [sidebar, setSidebar] = useState(true);
-  const [preview, setPreview] = useState(true);
+  const layout = useWorkbenchLayout();
+  const { sidebar, setSidebar, preview, setPreview, sidebarWidth, setSidebarWidth,
+    editorWidth, setEditorWidth, previewZoom, setPreviewZoom } = layout;
   const [wrap, setWrap] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(252);
-  const [editorWidth, setEditorWidth] = useState(Math.max(380, window.innerWidth * .43));
-  const [previewZoom, setPreviewZoom] = useState(125);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const buildFeedback = useBuildFeedback(buildView);
+  useEffect(() => {
+    if (buildFeedback.failed) setLogsOpen(true);
+  }, [buildFeedback.failed, buildView.generation]);
   const [filter, setFilter] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [modal, setModal] = useState<"new" | "help" | "settings" | "conflict" | "manage" | "directory" | "trash" | null>(null);
@@ -234,10 +242,8 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       setRecentWorkspaces(history);
       if (savedSession.found) {
         restoredSession.current = savedSession.state;
-        setSidebarWidth(savedSession.state.sidebarWidth);
-        setEditorWidth(savedSession.state.editorWidth);
-        setPreview(savedSession.state.previewOpen);
-        setPreviewZoom(savedSession.state.previewZoom);
+        // Layout v2 is stored with the renderer profile; old pixel widths must not
+        // override responsive ratios or turn off the new fit-width default.
         if (savedSession.state.workspaceRoot && nativeFiles)
           await openWorkspace(savedSession.state.workspaceRoot);
       }
@@ -652,14 +658,14 @@ const openWorkspace = async (workspaceId?: string) => {
     if (localSession) { startFileOperation('create'); return; }
     setFilename(""); setFileError(""); setModal("new");
   };
-  const startFileOperation = (operation: 'create' | 'rename' | 'remove') => {
+  const startFileOperation = (operation: 'create' | 'rename' | 'remove', target = view.active) => {
     if (!localSession || workspaceBusy || refreshInFlight.current) return;
     if (conflictRef.current || saveInFlight.current || localSession.getView().files.some(file => file.dirty)) {
       setLocalError('请先保存所有修改并处理冲突，再进行文件操作。'); return;
     }
-    if (operation !== 'create' && !view.active) return;
-    setFileOperation(operation); setOperationSource(view.active ?? '');
-    setFilename(operation === 'rename' ? view.active ?? '' : ''); setFileError(''); setModal('manage');
+    if (operation !== 'create' && !target) return;
+    setFileOperation(operation); setOperationSource(target ?? '');
+    setFilename(operation === 'rename' ? target ?? '' : ''); setFileError(''); setModal('manage');
   };
   const manageFile = async () => {
     if (!localSession || !project || mutationBusy.current || refreshInFlight.current) return;
@@ -762,33 +768,12 @@ const openWorkspace = async (workspaceId?: string) => {
   const statusLabel = localSession ? ({ loading: "正在读取文件", pending: "有未保存修改", saving: "正在保存文件",
     saved: "本地文件已保存", error: "本地文件操作失败" } satisfies Record<CacheStatus, string>)[activeStatus] : labels[activeStatus];
   return <main className="workbench">
-    <header className="topbar">
-      <a className="brand" href="#" onClick={event => { event.preventDefault(); setModal("help"); }} aria-label="关于 LightOverLeaf"><Icon name="leaf" size={23} /><span>LightOverLeaf</span></a>
-      <nav className="main-menu" aria-label="主菜单">
-        <button onClick={() => void openWorkspace()} disabled={!nativeFiles || !sessionReady || workspaceBusy}>
-          {workspaceBusy ? "正在打开…" : "打开项目"}</button>
-        <select aria-label="切换最近项目" value="" disabled={!nativeFiles || !sessionReady || workspaceBusy}
-          onChange={event => { if (event.target.value) void openWorkspace(event.target.value); }}>
-          <option value="">最近项目 / 切换</option>
-          {recentWorkspaces.map(id => <option key={id} value={id}>{projectNames[id] ?? id}{id === project?.workspaceId ? '（当前）' : ''}</option>)}
-        </select>
-        <button onClick={() => void exportDraft()} disabled={!nativeFiles || workspaceBusy}>导出草稿</button>
-        <button onClick={() => void refreshWorkspace()} disabled={!localSession || workspaceBusy}>刷新</button>
-        <button onClick={newFile} disabled={workspaceBusy}>新建</button>
-        {localSession && <button onClick={startDirectoryOperation} disabled={workspaceBusy}>目录</button>}
-        {localSession && <button onClick={() => void openTrash()} disabled={workspaceBusy}>回收站</button>}
-        {localSession && <><button disabled={!view.active || workspaceBusy} onClick={() => startFileOperation('rename')}>重命名</button>
-          <button disabled={!view.active || workspaceBusy} onClick={() => startFileOperation('remove')}>删除</button></>}
-        <button onClick={save}>{localSession ? "保存文件" : "缓存草稿"}</button>
-        <button onClick={() => editor.current?.run("find")}>查找</button>
-        <button onClick={openSettings}>设置</button>
-        <button onClick={() => setModal("help")}>帮助</button>
-      </nav>
-      <div className="project-title">{project?.displayName ?? "未命名项目"}
-        <span className="draft-badge">{project ? "本地" : "草稿"}</span></div>
-      <div className="topbar-right"><span className={"connection " + (native === "error" ? "error" : "")}><i />{native === "error" ? "原生通信异常" : connection.mode.startsWith("CEF") ? "本地 · 离线" : "浏览器开发模式"}</span>
-        <button className="layout-button" aria-pressed={preview} onClick={() => setPreview(!preview)}><Icon name="split" />布局</button></div>
-    </header>
+    <WorkbenchHeader projectName={project?.displayName ?? "未命名项目"} local={Boolean(localSession)} busy={workspaceBusy}
+      canOpen={nativeFiles && sessionReady && !workspaceBusy} canExport={nativeFiles && !workspaceBusy}
+      recent={recentWorkspaces.map(id => ({ id, name: projectNames[id] ?? "本地项目" }))}
+      onOpen={id => void openWorkspace(id)} onSave={save} onExport={() => void exportDraft()}
+      onRefresh={() => void refreshWorkspace()} onSettings={openSettings} onHelp={() => setModal("help")}
+      preset={layout.preset} onPreset={layout.setPreset} preview={preview} onPreview={setPreview} />
     <div className="workspace-body">
       <aside className="activity-bar" aria-label="工作区工具">
         <button className={sidebar && !showSearch ? "active" : ""} aria-label="切换文件侧栏" title="文件" onClick={() => { setSidebar(!sidebar || showSearch); setShowSearch(false); }}><Icon name="file" size={21} /></button>
@@ -797,12 +782,19 @@ const openWorkspace = async (workspaceId?: string) => {
         <div className="rail-spacer" /><button aria-label="设置" title="设置" onClick={openSettings}><Icon name="settings" size={19} /></button>
         <button aria-label="工作台帮助" title="帮助" onClick={() => setModal("help")}><Icon name="info" size={19} /></button>
       </aside>
-      {sidebar && <><aside className="sidebar" style={{ width: sidebarWidth }} aria-label="文件与大纲">
+      {sidebar && layout.drawer && <button className="sidebar-scrim" aria-label="收起文件侧栏" onClick={() => setSidebar(false)} />}
+      {sidebar && <><aside className={"sidebar " + (layout.drawer ? "sidebar-drawer" : "")} style={{ width: sidebarWidth }} aria-label="文件与大纲">
         <div className="panel-heading"><span><span className="down-chevron">⌄</span> 文件树</span>
           <div className="heading-actions"><Tool icon="plus" label="新建文件" disabled={workspaceBusy} onClick={newFile} />
             {localSession && <Tool icon="folder" label="管理目录" disabled={workspaceBusy} onClick={startDirectoryOperation} />}
+            <ActionMenu title="文件操作" className="align-right file-actions" label="⋯">
+              <button disabled={!localSession || !view.active || workspaceBusy} onClick={() => startFileOperation("rename")}>重命名当前文件…</button>
+              <button disabled={!localSession || !view.active || workspaceBusy} onClick={() => startFileOperation("remove")}>删除当前文件…</button>
+              <hr /><button disabled={!localSession || workspaceBusy} onClick={() => void refreshWorkspace()}>刷新文件树</button>
+              <button disabled={!localSession || workspaceBusy} onClick={() => void openTrash()}>项目回收站…</button>
+            </ActionMenu>
             <Tool icon="close" label="隐藏侧栏" onClick={() => setSidebar(false)} /></div></div>
-        <div className="workspace-label"><span className="tiny-dot" /> {project?.displayName ?? "应用内草稿"} <span>{explorerFiles.length}</span></div>
+        <div className="workspace-label"><span className="tiny-dot" /><span className="truncate" title={project?.displayName ?? "应用内草稿"}>{project?.displayName ?? "应用内草稿"}</span><span>{explorerFiles.length}</span></div>
         {showSearch && (localSession ? <><div className="file-search"><Icon name="search" size={14} />
           <input ref={search} aria-label="搜索项目内容" placeholder="搜索项目内容…" value={projectQuery}
             onChange={event => setProjectQuery(event.target.value)}
@@ -815,20 +807,17 @@ const openWorkspace = async (workspaceId?: string) => {
           <div className="file-search"><Icon name="search" size={14} /><input ref={search} aria-label="按文件名筛选" placeholder="按文件名筛选…" value={filter} onChange={event => setFilter(event.target.value)} /></div>)}
         <Explorer files={explorerFiles} directories={explorerDirectories} active={view.active}
           activeDirectory={selectedDirectory} filter={showSearch && !localSession ? filter : ""}
-          onSelectDirectory={setSelectedDirectory} onOpen={path => void openLocalFile(path)} />
-        <section className="outline-panel" aria-label="文档大纲">
-          <div className="panel-heading"><span><span className="down-chevron">⌄</span> 文档大纲</span><small>{view.outline.length}</small></div>
-          <div className="outline-list">
-            {view.outline.map(item => <button key={item.line} className={"outline-item " + (outlineLine === item.line ? "selected" : "")}
-              style={{ paddingLeft: 14 + Math.max(0, item.level - 1) * 17 }}
-              onClick={() => { setOutlineLine(item.line); editor.current?.reveal(item.line); }} title={item.title}>
-              <span className="outline-marker">{item.level <= 1 ? "⌄" : "·"}</span><span className="truncate">{item.title}</span></button>)}
-            {!view.outline.length && <p className="empty-small muted">当前文件没有可导航的章节。</p>}
-          </div>
-          <div className="sidebar-footer">章节大纲 · 当前文件</div>
-        </section>
-      </aside><Splitter label="调整侧栏宽度" min={190} max={380} value={sidebarWidth} onChange={setSidebarWidth} /></>}
-      <section className="editor-panel" aria-label="源码编辑区域" style={preview ? { flexBasis: editorWidth, flexGrow: 0, flexShrink: 1 } : undefined}>
+          openFiles={view.open} onSelectDirectory={setSelectedDirectory}
+          onRename={localSession ? path => startFileOperation("rename", path) : undefined}
+          onRemove={localSession ? path => startFileOperation("remove", path) : undefined}
+          operationsDisabled={workspaceBusy} onOpen={path => { void openLocalFile(path); if (layout.drawer) setSidebar(false); }} />
+        <OutlinePanel key={view.active} entries={view.outline} activeLine={outlineLine}
+          onSelect={line => { setOutlineLine(line); editor.current?.reveal(line); if (layout.drawer) setSidebar(false); }} />
+      </aside>{!layout.drawer && <Splitter label="调整侧栏宽度" min={220} max={380}
+        value={sidebarWidth} onChange={setSidebarWidth} />}</>}
+      <div className="work-area"><div className="document-panes">
+      <section className="editor-panel" aria-label="源码编辑区域" hidden={!layout.editorVisible}
+        style={layout.previewVisible ? { flexBasis: editorWidth, flexGrow: 0, flexShrink: 0 } : undefined}>
         <div className="editor-tabs" role="tablist" aria-label="打开的文件">
           {view.open.map(path => <div key={path} className={"editor-tab " + (path === view.active ? "active" : "")}>
             <button role="tab" aria-selected={path === view.active} onClick={() => session.activate(path)} title={path}><Icon name="file" size={14} />{path.split("/").at(-1)}{view.files.find(file => file.path === path)?.dirty && <span className="dirty-dot" />}</button>
@@ -845,19 +834,20 @@ const openWorkspace = async (workspaceId?: string) => {
           <button className="text-tool" title="插入粗体命令" aria-label="插入粗体" disabled={!view.active} onClick={() => editor.current?.run("bold")}><b>B</b></button>
           <button className="text-tool" title="插入斜体命令" aria-label="插入斜体" disabled={!view.active} onClick={() => editor.current?.run("italic")}><i>I</i></button>
           <Tool icon="wrap" label="自动换行" pressed={wrap} onClick={() => setWrap(!wrap)} />
-          <div className="toolbar-spacer" /><span className="code-pill"><Icon name="code" size={13} />源码</span>
+          <div className="editor-path" title={view.active ?? "未打开文件"}>{view.active ?? "未打开文件"}</div>
           <Tool icon="pdf" label="定位到 PDF" disabled={!buildView.artifactId || !buildView.syncTexAvailable || !view.active}
             onClick={() => void forwardSync()} />
           <Tool icon="search" label="查找当前文档 (Ctrl+F)" disabled={!view.active} onClick={() => editor.current?.run("find")} />
         </div>
-        <div className="editor-breadcrumb"><span>{project?.displayName ?? "草稿"}</span><span> / </span><span>{view.active ?? "未打开文件"}</span></div>
         <div className="editor-content"><EditorSurface session={session} wrap={wrap} readOnly={workspaceBusy} ref={editor} onReady={() => setEditorReady(true)} />
           {!view.active && <div className="editor-empty"><Icon name="code" size={38} /><p>从左侧选择文件，继续写作。</p>{!localSession && <button onClick={newFile}>新建草稿</button>}</div>}
         </div>
-        <div className={"draft-notice " + (activeStatus === "error" ? "error" : "")} role={activeError ? "alert" : undefined}><Icon name={activeStatus === "error" ? "warning" : "info"} size={13} /><span>{activeError || (localSession ? "本地保存使用 Revision 冲突保护，不会静默覆盖外部修改。" : "草稿可直接编译预览；只有导出项目时才选择目标目录。")}</span>
-          {conflictFile && <button onClick={() => void inspectConflict()}>对比版本</button>}</div>
+        {activeError && <div className={"draft-notice " + (activeStatus === "error" ? "error" : "")} role={activeError ? "alert" : undefined}><Icon name={activeStatus === "error" ? "warning" : "info"} size={13} /><span>{activeError || (localSession ? "本地保存使用 Revision 冲突保护，不会静默覆盖外部修改。" : "草稿可直接编译预览；只有导出项目时才选择目标目录。")}</span>
+          {conflictFile && <button onClick={() => void inspectConflict()}>对比版本</button>}</div>}
       </section>
-      {preview && <><Splitter label="调整编辑器宽度" min={300} max={Math.max(400, window.innerWidth - 400)} value={editorWidth} onChange={setEditorWidth} />
+      {layout.previewVisible && layout.editorVisible && <Splitter label="调整编辑器宽度" min={300}
+        max={layout.maxEditorWidth} value={editorWidth} onChange={setEditorWidth} />}
+      <div className="preview-pane-shell" hidden={!layout.previewVisible}>
         <PreviewPanel build={buildView} canCompile={Boolean(view.active && nativeBuild && !workspaceBusy)}
           onCompile={requestCompile} onCancel={() => void cancelBuild()}
           onConfigure={openSettings}
@@ -871,15 +861,28 @@ const openWorkspace = async (workspaceId?: string) => {
             current.candidate?.generation !== generation ? current : ({ ...current, state: "failed",
               candidate: undefined, phase: "render", output: current.output + "\nPDF.js: " + message }))}
           target={pdfTarget} zoom={previewZoom} onZoomChange={setPreviewZoom}
+          zoomMode={layout.zoomMode} onZoomModeChange={layout.setZoomMode}
+          logsOpen={logsOpen} onToggleLogs={() => setLogsOpen(value => !value)}
           onReverse={(page, x, y) => { if (buildView.artifactId) void authoringConnection.reverse(buildView.artifactId, page, x, y)
             .then(location => openSearchHit(location.fileId, location.line))
             .catch(failure => setLocalError("SyncTeX 反向定位失败：" + (failure as Error).message)); }}
-          onDiagnostic={(fileId, line) => void openSearchHit(fileId, line)} /></>}
+          /></div>
+      </div>
+      <BuildLogPanel build={buildView} open={logsOpen} onClose={() => setLogsOpen(false)}
+        onDiagnostic={(fileId, line) => { if (!layout.editorVisible) layout.setPreset("split"); void openSearchHit(fileId, line); }} />
+      </div>
     </div>
-    <footer className="statusbar"><span className="status-brand"><Icon name="leaf" size={12} /> LOCAL</span>
+    <footer className="statusbar"><span className="status-brand" title={connection.mode}><Icon name="leaf" size={12} />
+      {connection.mode.includes("Fake") ? "DEV" : "LOCAL"}</span>
       <span className={activeStatus === "error" ? "error" : ""} role="status"><Icon name={activeStatus === "saved" ? "check" : activeStatus === "error" ? "warning" : "save"} size={13} />
         {statusLabel}</span>
-      <span className="status-spacer" /><span>行 {view.line}，列 {view.column}</span><span>UTF-8</span><span>LaTeX</span><span className="version">开发预览</span></footer>
+      <button className={"build-status " + (buildFeedback.failed ? "error" : "")} onClick={() => setLogsOpen(value => !value)}
+        aria-expanded={logsOpen} title="展开或收起编译日志"><Icon name={buildFeedback.failed ? "warning" : "terminal"} size={13} />
+        {buildFeedback.summary}{buildFeedback.elapsedLabel && <span className="elapsed-time">{buildFeedback.elapsedLabel}</span>}</button>
+      <span className="status-spacer" />
+      <span className={"native-status " + (native === "error" ? "error" : "")} title={connection.mode}>
+        <i className="tiny-dot" />{native === "error" ? "原生通信异常" : native === "pending" ? "连接中…" : connection.mode.includes("Fake") ? "浏览器开发模式" : "原生服务已连接"}</span>
+      <span>行 {view.line}，列 {view.column}</span><span className="encoding-status">UTF-8</span><span className="encoding-status">LaTeX</span></footer>
     {modal && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}>
       <section className={"modal" + (modal === "conflict" ? " conflict-modal" : "")} role="dialog" aria-modal="true" aria-labelledby="dialog-title">
         <div className="modal-title"><h2 id="dialog-title">{modal === "settings" ? "本地设置与会话" : modal === "trash" ? "项目回收站" : modal === "directory" ? "目录管理" : modal === "manage" ? ({ create: '新建本地文件', rename: '重命名文件', remove: '删除文件' })[fileOperation] : modal === "conflict" ? "处理文件冲突" : modal === "new" ? "新建草稿文件" : "你的本地写作工作台"}</h2><Tool icon="close" label="关闭对话框" onClick={() => setModal(null)} /></div>
@@ -898,7 +901,7 @@ const openWorkspace = async (workspaceId?: string) => {
             <option value="onSave">仅保存后编译</option>
             <option value="manual">仅手动编译</option>
           </select>
-          <p>重启后自动恢复上次项目及标签；也可以通过“最近项目 / 切换”打开其他已授权目录。路径保存在本机 SQLite，不向前端开放任意路径访问。</p>
+          <p>重启后自动恢复上次项目及标签；也可以通过“项目 → 最近项目”打开其他已授权目录。路径保存在本机 SQLite，不向前端开放任意路径访问。</p>
           <div className="recent-workspaces"><b>最近项目</b>
             {recentWorkspaces.map(root => <button key={root} disabled={workspaceBusy || !sessionReady} onClick={() => void openWorkspace(root)}>{projectNames[root] ?? root}</button>)}
             {!recentWorkspaces.length && <span className="muted">暂无记录</span>}

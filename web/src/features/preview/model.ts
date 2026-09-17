@@ -11,3 +11,5 @@ export interface BuildView {
   candidate?: { generation: number; artifactId: string; pdf: Uint8Array; syncTexAvailable: boolean };
 }
 export interface PdfTarget { page: number; x: number; y: number; revision: number }
+
+export type PdfZoomMode = "width" | "page" | "custom";

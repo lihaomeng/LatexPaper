@@ -1,5 +1,7 @@
-export type IconName = "file" | "folder" | "search" | "plus" | "close" | "chevron" | "undo" | "redo" | "split" | "code" | "save" | "pdf" | "settings" | "check" | "wrap" | "info" | "leaf" | "play" | "warning" | "terminal";
+export type IconName = "edit" | "trash" | "file" | "folder" | "search" | "plus" | "close" | "chevron" | "undo" | "redo" | "split" | "code" | "save" | "pdf" | "settings" | "check" | "wrap" | "info" | "leaf" | "play" | "warning" | "terminal";
 const paths: Record<IconName, string> = {
+  edit: "M4 17l-1 4 4-1L21 6l-3-3z M15 6l3 3",
+  trash: "M3 6h18 M8 6V3h8v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7",
   file: "M6 3h8l4 4v14H6z M14 3v5h4 M9 12h6 M9 16h6",
   folder: "M3 6h7l2 2h9v12H3z",
   search: "M16 16l5 5 M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
