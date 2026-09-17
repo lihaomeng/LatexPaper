@@ -1,6 +1,6 @@
 #requires -Version 5.1
 param(
-    [string]$MiKTeXRoot = 'D:/CodeMyself/QTBest/thirdparty_install/miktex',
+    [string]$MiKTeXRoot,
     [switch]$SkipBuild,
     [ValidateRange(30, 600)][int]$SmokeTimeoutSeconds = 120
 )

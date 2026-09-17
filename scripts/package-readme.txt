@@ -1,7 +1,7 @@
 LightOverLeaf Full green-directory distribution / Windows 10/11 x64
 
 Run LightOverLeaf.exe directly from this directory.
-Keep all sibling DLLs, platforms, locales, web resources and runtime/miktex in place.
+Keep all bundled executables, DLLs, locales, application resources and runtime/miktex in place.
 
 This is the only supported edition. It includes the source-built MiKTeX runtime,
 does not use a system TeX installation, and never extracts an application payload

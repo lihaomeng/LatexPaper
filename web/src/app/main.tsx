@@ -1,6 +1,9 @@
+import { useProjectSearch } from "./useProjectSearch";
+import { useWorkbenchSettings } from "./useWorkbenchSettings";
+import { SettingsForm } from "./layout/SettingsForm";
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { createStartupEvents, payloadSmokeProbe, type Preferences } from "../native-api";
+import { createStartupEvents, payloadSmokeProbe } from "../native-api";
 import type { SessionSnapshot } from "../native-api";
 import type { WorkspaceStateResponseResult, WorkspaceTrashListResponseResultEntriesItem } from "../../.generated/rpc/protocol";
 import { EditorSession, EditorSurface, type EditorCommands } from "../features/editor";
@@ -28,7 +31,6 @@ import { createNativeServices } from "./nativeServices";
 
 const { connection, systemConnection, workspaceConnection, workspaceOpenConnection,
   authoringConnection, exportConnection, preferencesSessionConnection } = createNativeServices(import.meta.env.DEV);
-const defaultPreferences: Preferences = { texRoot: "", engine: "pdflatex", timeoutMs: 120000, compileMode: "live" };
 const labels: Record<CacheStatus, string> = { loading: "正在读取草稿", pending: "有待缓存修改", saving: "正在缓存草稿", saved: "草稿已缓存", error: "草稿缓存失败" };
 function Tool({ icon, label, onClick, pressed, disabled }: { icon: IconName; label: string; onClick(): void; pressed?: boolean; disabled?: boolean }) {
   return <button className="tool-button" title={label} aria-label={label} aria-pressed={pressed} onClick={onClick} disabled={disabled}><Icon name={icon} /></button>;
@@ -67,17 +69,15 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   const [directorySource, setDirectorySource] = useState('');
   const [selectedDirectory, setSelectedDirectory] = useState<string | null>(null);
   const [trashEntries, setTrashEntries] = useState<WorkspaceTrashListResponseResultEntriesItem[]>([]);
-  const [projectQuery, setProjectQuery] = useState("");
-  const [searchHits, setSearchHits] = useState<{ fileId: string; line: number; column: number; preview: string }[]>([]);
-  const [searchBusy, setSearchBusy] = useState(false);
-  const [searchError, setSearchError] = useState("");
+  const { query: projectQuery, setQuery: setProjectQuery, hits: searchHits,
+    busy: searchBusy, error: searchError, run: runProjectSearch, reset: resetProjectSearch } =
+    useProjectSearch(authoringConnection, localSession);
   const [buildView, setBuildView] = useState<BuildView>({ state: "idle", output: "", diagnostics: [] });
   const [compileController] = useState(() => new CompileController(authoringConnection, setBuildView));
-  const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
-  const [preferencesDraft, setPreferencesDraft] = useState<Preferences>(defaultPreferences);
+  const settings = useWorkbenchSettings(preferencesSessionConnection);
+  const { preferences, draft: preferencesDraft, setDraft: setPreferencesDraft,
+    busy: settingsBusy, error: settingsError, setError: setSettingsError } = settings;
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>([]);
-  const [settingsBusy, setSettingsBusy] = useState(false);
-  const [settingsError, setSettingsError] = useState("");
   const [sessionReady, setSessionReady] = useState(false);
   const switchingWorkspace = useRef(false);
   const [projectNames, setProjectNames] = useState<Record<string, string>>(() => {
@@ -88,6 +88,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
         /^workspace-[a-zA-Z0-9-]+$/.test(id) && typeof name === 'string').slice(0, 100));
     } catch { return {}; }
   });
+  const restoredLayout = useRef({ sidebarWidth: 260, editorWidth: 600, previewOpen: true, previewZoom: 100 });
   const restoredSession = useRef<SessionSnapshot | null>(null);
 
 
@@ -238,10 +239,12 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       preferencesSessionConnection.history(),
     ]).then(async ([savedPreferences, savedSession, history]) => {
       if (!active) return;
-      setPreferences(savedPreferences); setPreferencesDraft(savedPreferences);
+      settings.restore(savedPreferences);
       setRecentWorkspaces(history);
       if (savedSession.found) {
         restoredSession.current = savedSession.state;
+        const { sidebarWidth, editorWidth, previewOpen, previewZoom } = savedSession.state;
+        restoredLayout.current = { sidebarWidth, editorWidth, previewOpen, previewZoom };
         // Layout v2 is stored with the renderer profile; old pixel widths must not
         // override responsive ratios or turn off the new fit-width default.
         if (savedSession.state.workspaceRoot && nativeFiles)
@@ -259,20 +262,20 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
         workspaceRoot: project?.workspaceId ?? "",
         openFiles: localSession ? view.open : [],
         activeFile: localSession ? view.active ?? "" : "",
-        sidebarWidth,
-        editorWidth: Math.round(editorWidth),
-        previewOpen: preview,
+        // Legacy protocol fields are round-tripped only; layout v2 belongs to the renderer profile.
+        sidebarWidth: restoredLayout.current.sidebarWidth,
+        editorWidth: restoredLayout.current.editorWidth,
+        previewOpen: restoredLayout.current.previewOpen,
         activeLine: localSession ? view.line : 1,
         activeColumn: localSession ? view.column : 1,
-        previewZoom,
+        previewZoom: restoredLayout.current.previewZoom,
       }).then(() => {
         if (project?.workspaceId)
           setRecentWorkspaces(current => [project.workspaceId, ...current.filter(item => item !== project.workspaceId)].slice(0, 20));
       }).catch(failure => setSettingsError("保存会话失败：" + (failure as Error).message));
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [native, sessionReady, workspaceBusy, project?.workspaceId, localSession, view.open, view.active, view.line, view.column,
-    sidebarWidth, editorWidth, preview, previewZoom]);
+  }, [native, sessionReady, workspaceBusy, project?.workspaceId, localSession, view.open, view.active, view.line, view.column]);
   useEffect(() => {
     if (native === "ready" && editorReady && activeStatus === "saved") document.title = "LightOverLeaf · Native Ready";
     else if (native === "error") document.title = "LightOverLeaf · Native Error";
@@ -476,7 +479,7 @@ const openWorkspace = async (workspaceId?: string) => {
         try { localStorage.setItem('lightoverleaf.projectNames', JSON.stringify(names)); } catch { /* Optional display cache. */ }
         return names;
       });
-      setSearchHits([]); setProjectQuery(""); setSearchError("");
+      resetProjectSearch();
       setBuildView({ state: "idle", output: "", diagnostics: [] });
       setPdfTarget(null); setSelectedDirectory(null); setOutlineLine(null);
     } catch (failure) {
@@ -531,18 +534,6 @@ const openWorkspace = async (workspaceId?: string) => {
       if (localSessionRef.current !== localSession || sequence !== documentOpenSequence.current) return;
       setLocalStatus("error"); setLocalError("打开文件失败：" + (failure as Error).message);
     }
-  };
-  const runProjectSearch = async () => {
-    if (!localSession || !project || searchBusy || !projectQuery.trim()) return;
-    setSearchBusy(true); setSearchError("");
-    try {
-      const result = await authoringConnection.search(projectQuery, false, 200);
-      if (localSessionRef.current !== localSession) return;
-      setSearchHits(result.hits);
-      if (result.truncated) setSearchError("结果已达到 200 条上限，请缩小查询范围。");
-    } catch (failure) {
-      if (localSessionRef.current === localSession) setSearchError("项目搜索失败：" + (failure as Error).message);
-    } finally { if (localSessionRef.current === localSession) setSearchBusy(false); }
   };
   const openSearchHit = async (fileId: string, line: number) => {
     await openLocalFile(fileId);
@@ -638,21 +629,17 @@ const openWorkspace = async (workspaceId?: string) => {
     catch (failure) { setLocalError("取消编译失败：" + (failure as Error).message); }
   };
   const openSettings = () => {
-    setPreferencesDraft(preferences); setSettingsError(""); setModal("settings");
+    settings.begin(); setModal("settings");
     void preferencesSessionConnection.history().then(setRecentWorkspaces)
       .catch(failure => setSettingsError("读取最近项目失败：" + (failure as Error).message));
   };
   const savePreferences = async () => {
-    if (settingsBusy) return;
-    setSettingsBusy(true); setSettingsError("");
-    try {
-      const saved = await preferencesSessionConnection.updatePreferences(preferencesDraft);
-      setPreferences(saved); setPreferencesDraft(saved); setModal(null);
-      if (saved.texRoot !== preferences.texRoot)
-        setLocalError("编译设置已保存；当前项目下次编译会使用内置 MiKTeX Runtime。");
-    } catch (failure) {
-      setSettingsError("保存设置失败：" + (failure as Error).message);
-    } finally { setSettingsBusy(false); }
+    const previousRoot = preferences.texRoot;
+    const saved = await settings.save();
+    if (!saved) return;
+    setModal(null);
+    if (saved.texRoot !== previousRoot)
+      setLocalError("编译设置已保存；当前项目下次编译会使用内置 MiKTeX Runtime。");
   };
   const newFile = () => {
     if (localSession) { startFileOperation('create'); return; }
@@ -886,30 +873,10 @@ const openWorkspace = async (workspaceId?: string) => {
     {modal && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}>
       <section className={"modal" + (modal === "conflict" ? " conflict-modal" : "")} role="dialog" aria-modal="true" aria-labelledby="dialog-title">
         <div className="modal-title"><h2 id="dialog-title">{modal === "settings" ? "本地设置与会话" : modal === "trash" ? "项目回收站" : modal === "directory" ? "目录管理" : modal === "manage" ? ({ create: '新建本地文件', rename: '重命名文件', remove: '删除文件' })[fileOperation] : modal === "conflict" ? "处理文件冲突" : modal === "new" ? "新建草稿文件" : "你的本地写作工作台"}</h2><Tool icon="close" label="关闭对话框" onClick={() => setModal(null)} /></div>
-        {modal === "settings" ? <form onSubmit={event => { event.preventDefault(); void savePreferences(); }}>
-          <p><b>编译工具链：</b>内置 MiKTeX Runtime（Full 版固定使用，不读取系统 TeX）。</p>
-          <p>编译引擎：pdfLaTeX（内置）。旧版引擎设置已统一迁移；不自动处理 BibTeX/Biber。</p>
-          <label htmlFor="tex-timeout">编译超时（毫秒）</label>
-          <input id="tex-timeout" type="number" min={1000} max={300000} value={preferencesDraft.timeoutMs}
-            disabled={settingsBusy} onChange={event => setPreferencesDraft(current => ({ ...current,
-              timeoutMs: Number(event.target.value) }))} />
-          <label htmlFor="compile-mode">编译触发方式</label>
-          <select id="compile-mode" value={preferencesDraft.compileMode} disabled={settingsBusy}
-            onChange={event => setPreferencesDraft(current => ({ ...current,
-              compileMode: event.target.value as Preferences['compileMode'] }))}>
-            <option value="live">实时预览（停止输入 900 ms）</option>
-            <option value="onSave">仅保存后编译</option>
-            <option value="manual">仅手动编译</option>
-          </select>
-          <p>重启后自动恢复上次项目及标签；也可以通过“项目 → 最近项目”打开其他已授权目录。路径保存在本机 SQLite，不向前端开放任意路径访问。</p>
-          <div className="recent-workspaces"><b>最近项目</b>
-            {recentWorkspaces.map(root => <button key={root} disabled={workspaceBusy || !sessionReady} onClick={() => void openWorkspace(root)}>{projectNames[root] ?? root}</button>)}
-            {!recentWorkspaces.length && <span className="muted">暂无记录</span>}
-          </div>
-          {settingsError && <p className="error" role="alert">{settingsError}</p>}
-          <div className="modal-actions"><button type="button" onClick={() => setModal(null)}>取消</button>
-            <button className="primary" type="submit" disabled={settingsBusy}>{settingsBusy ? "保存中…" : "保存设置"}</button></div>
-        </form> : modal === "trash" ? <>
+        {modal === "settings" ? <SettingsForm preferencesDraft={preferencesDraft} setPreferencesDraft={setPreferencesDraft}
+          settingsBusy={settingsBusy} settingsError={settingsError} recentWorkspaces={recentWorkspaces}
+          projectNames={projectNames} workspaceBusy={workspaceBusy} sessionReady={sessionReady}
+          onSave={() => void savePreferences()} onClose={() => setModal(null)} onOpenWorkspace={id => void openWorkspace(id)} /> : modal === "trash" ? <>
           <p>删除内容保留在项目内，仅能恢复到记录的原路径；不会覆盖同名文件或目录。</p>
           <div className="trash-list">
             {trashEntries.map(entry => <div key={entry.trashId} className="trash-entry">

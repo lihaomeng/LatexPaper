@@ -42,3 +42,7 @@ Implementation references:
 
 Electron version is pinned in apps/electron/package-lock.json. The development
 build uses the package's explicit install.js runtime installation command.
+
+## 2026-09-17：开发分发入口收敛
+
+默认 `scripts/package.ps1` 消费 Electron 开发构建，需要构建时只使用 `scripts/build.ps1 --dev`。它不自动执行测试或旧 CEF smoke，输出报告明确标记未运行项；开发分发不代表通过发布验收。旧 Qt/CEF 打包通过 `-LegacyCef` 显式选择。详细边界与验证见 [架构收敛记录](../../acceptance/architecture-cleanup.md)。

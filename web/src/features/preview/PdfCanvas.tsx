@@ -3,6 +3,7 @@ import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFDocume
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useDevicePixelRatio } from "../../shared/useDevicePixelRatio";
 import { renderPageRaster, publishRaster } from "./pdfRaster";
+import { usePdfPageRaster, type PublishedPage } from "./usePdfPageRaster";
 import { ContinuousPdfPage } from "./ContinuousPdfPage";
 import type { PdfTarget, PdfZoomMode } from "./model";
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -40,6 +41,7 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
     return () => { observer.disconnect(); cancelAnimationFrame(tick); };
   }, []);
   const marker = useRef<HTMLSpanElement>(null);
+  const published = useRef<PublishedPage | null>(null);
   const committedDocument = useRef<PDFDocumentProxy | null>(null);
   const committedTask = useRef<PDFDocumentLoadingTask | null>(null);
   const commitCallback = useRef(onCommit);
@@ -93,6 +95,7 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
           if (!active || !canvas.current) return;
           if (settingsKey(settings) !== settingsKey(displaySettings.current)) continue;
           publishRaster(canvas.current, raster);
+          published.current = { document: candidate, number: 1, scale, deviceRatio: settings.deviceRatio };
           setFrame({ page: 1, scale, width: raster.viewport.width, height: raster.viewport.height });
           break;
         } finally { raster.canvas.width = 0; raster.canvas.height = 0; }
@@ -125,28 +128,10 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
   }, [data]);
 
   useEffect(() => () => { if (committedTask.current) void committedTask.current.destroy(); }, []);
-  useEffect(() => {
-    if (!document || !canvas.current) return;
-    let cancelled = false;
-    let render: { cancel(): void; promise: Promise<void> } | undefined;
-    void document.getPage(1).then(async pdfPage => {
-      if (cancelled || committedDocument.current !== document || !canvas.current) return;
-      const scale = pageScale(pdfPage, displaySettings.current);
-      const raster = renderPageRaster(pdfPage, scale, deviceRatio);
-      render = raster.task;
-      try {
-        await render.promise;
-        if (cancelled || committedDocument.current !== document || !canvas.current) return;
-        publishRaster(canvas.current, raster);
-        setFrame({ page: 1, scale, width: raster.viewport.width, height: raster.viewport.height });
-      } finally { raster.canvas.width = 0; raster.canvas.height = 0; }
-      setError("");
-    }).catch(failure => {
-      if (!cancelled && (failure as Error).name !== "RenderingCancelledException")
-        setError((failure as Error).message || "PDF_RENDER_FAILED");
-    });
-    return () => { cancelled = true; render?.cancel(); };
-  }, [document, zoom, zoomMode, bounds.width, bounds.height, deviceRatio]);
+  const firstScale = sizes[0] ? pageScale({ getViewport: () => sizes[0] }, displaySettings.current) : zoom / 100;
+  const pageError = usePdfPageRaster({ document, number: 1, scale: firstScale, deviceRatio, canvas,
+    preserve: true, published, isCurrent: () => committedDocument.current === document,
+    onPublished: value => setFrame({ page: 1, ...value }) });
   const goToPage = (number: number) => {
     if (!document) return;
     const next = Math.max(1, Math.min(document.numPages, number));
@@ -196,8 +181,8 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
     goToPage(next); setPageText(String(next));
   };
   return <div className="pdf-viewer">
-    {(loading || error) && <div className={"pdf-render-status " + (error ? "error" : "loading")} role="status">
-      {error ? `新预览渲染失败，继续显示上一份成功 PDF：${error}` : "正在验证并渲染新 PDF，当前预览保持不变…"}
+    {(loading || error || pageError) && <div className={"pdf-render-status " + (error || pageError ? "error" : "loading")} role="status">
+      {error ? `新预览渲染失败，继续显示上一份成功 PDF：${error}` : pageError ? `页面渲染失败：${pageError}` : "正在验证并渲染新 PDF，当前预览保持不变…"}
     </div>}
     <div className="pdf-controls">
       <div className="page-controls">
