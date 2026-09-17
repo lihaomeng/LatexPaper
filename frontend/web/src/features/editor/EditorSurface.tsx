@@ -45,8 +45,13 @@ export const EditorSurface = forwardRef<EditorCommands, { session: EditorSession
     }), []);
     useEffect(() => {
       if (!host.current) return;
+      const overlays = document.createElement("div");
+      overlays.className = "monaco-editor vs-dark editor-overlays";
+      document.body.appendChild(overlays);
       const editor = monaco.editor.create(host.current, {
         model: null, theme: "lightoverleaf-dark", automaticLayout: true,
+        overflowWidgetsDomNode: overlays, fixedOverflowWidgets: true,
+        find: { addExtraSpaceOnTop: true },
         fontFamily: 'Consolas, "Cascadia Code", "Microsoft YaHei", monospace',
         fontSize: 13, lineHeight: 24, minimap: { enabled: false },
         padding: { top: 18, bottom: 20 }, scrollBeyondLastLine: false,
@@ -74,7 +79,7 @@ export const EditorSurface = forwardRef<EditorCommands, { session: EditorSession
       const unsubscribe = session.subscribe(update);
       const cursor = editor.onDidChangeCursorPosition(event => session.setCursor(event.position.lineNumber, event.position.column));
       ready.current();
-      return () => { unsubscribe(); cursor.dispose(); editor.dispose(); instance.current = null; };
+      return () => { unsubscribe(); cursor.dispose(); editor.dispose(); overlays.remove(); instance.current = null; };
     }, [session]);
     useEffect(() => { instance.current?.updateOptions({ wordWrap: wrap ? "on" : "off" }); }, [wrap]);
     useEffect(() => { instance.current?.updateOptions({ readOnly }); }, [readOnly]);

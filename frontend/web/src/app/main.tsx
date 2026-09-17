@@ -93,6 +93,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
   }, [buildFeedback.failed, buildView.generation]);
   const [filter, setFilter] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [filesExpanded, setFilesExpanded] = useState(true);
   const [modal, setModal] = useState<"new" | "help" | "settings" | "conflict" | "manage" | "directory" | "trash" | null>(null);
   const [filename, setFilename] = useState("");
   const [fileError, setFileError] = useState("");
@@ -510,19 +511,24 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       onCompile={compilePresentation.running ? () => void cancelBuild() : requestCompile}
       recent={recentWorkspaces.map(id => ({ id, name: projectNames[id] ?? "本地项目" }))}
       onOpen={id => void openWorkspace(id)} onSave={save} onExport={() => void exportDraft()}
-      onRefresh={() => void refreshWorkspace()} onSettings={openSettings} onHelp={() => setModal("help")}
+      onRefresh={() => void refreshWorkspace()} onHelp={() => setModal("help")}
       preset={layout.preset} onPreset={layout.setPreset} preview={preview} onPreview={setPreview} />
     <div className="workspace-body">
       <aside className="activity-bar" aria-label="工作区工具">
         <button className={sidebar && !showSearch ? "active" : ""} aria-label="切换文件侧栏" title="文件" onClick={() => { setSidebar(!sidebar || showSearch); setShowSearch(false); }}><Icon name="file" size={21} /></button>
-        <button className={showSearch ? "active" : ""} aria-label="搜索项目" title="搜索项目内容" onClick={() => { setSidebar(true); setShowSearch(!showSearch); }}><Icon name="search" size={20} /></button>
+        <button className={showSearch ? "active" : ""} aria-label="搜索项目" title="搜索项目内容" onClick={() => { setSidebar(true); setFilesExpanded(true); setShowSearch(!showSearch); }}><Icon name="search" size={20} /></button>
         <button aria-label="新建文件" title="新建文件" disabled={workspaceBusy} onClick={newFile}><Icon name="plus" size={20} /></button>
         <div className="rail-spacer" /><button aria-label="设置" title="设置" onClick={openSettings}><Icon name="settings" size={19} /></button>
         <button aria-label="工作台帮助" title="帮助" onClick={() => setModal("help")}><Icon name="info" size={19} /></button>
       </aside>
       {sidebar && layout.drawer && <button className="sidebar-scrim" aria-label="收起文件侧栏" onClick={() => setSidebar(false)} />}
-      {sidebar && <><aside className={"sidebar " + (layout.drawer ? "sidebar-drawer" : "")} style={{ width: sidebarWidth }} aria-label="文件与大纲">
-        <div className="panel-heading"><span><span className="down-chevron">⌄</span> 文件树</span>
+      {sidebar && <><aside className={"sidebar " + (layout.drawer ? "sidebar-drawer " : "") + (!filesExpanded ? "files-collapsed" : "")} style={{ width: sidebarWidth }} aria-label="文件与大纲">
+        <div className="panel-heading explorer-heading">
+          <button className="explorer-toggle" aria-expanded={filesExpanded} aria-controls="explorer-content"
+            title={filesExpanded ? "收起文件树" : "展开文件树"} onClick={() => setFilesExpanded(value => !value)}>
+            <span className={filesExpanded ? "section-chevron expanded" : "section-chevron"}><Icon name="chevron" size={14} /></span>
+            <span>文件树</span>
+          </button>
           <div className="heading-actions"><Tool icon="plus" label="新建文件" disabled={workspaceBusy} onClick={newFile} />
             {localSession && <Tool icon="folder" label="管理目录" disabled={workspaceBusy} onClick={startDirectoryOperation} />}
             <ActionMenu title="文件操作" className="align-right file-actions" label="⋯">
@@ -532,6 +538,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
               <button disabled={!localSession || workspaceBusy} onClick={() => void openTrash()}>项目回收站…</button>
             </ActionMenu>
             <Tool icon="close" label="隐藏侧栏" onClick={() => setSidebar(false)} /></div></div>
+        <div id="explorer-content" className="explorer-content" hidden={!filesExpanded}>
         <div className="workspace-label"><span className="tiny-dot" /><span className="truncate" title={project?.displayName ?? "应用内草稿"}>{project?.displayName ?? "应用内草稿"}</span><span>{explorerFiles.length}</span></div>
         {showSearch && (localSession ? <><div className="file-search"><Icon name="search" size={14} />
           <input ref={search} aria-label="搜索项目内容" placeholder="搜索项目内容…" value={projectQuery}
@@ -549,6 +556,7 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
           onRename={localSession ? path => startFileOperation("rename", path) : undefined}
           onRemove={localSession ? path => startFileOperation("remove", path) : undefined}
           operationsDisabled={workspaceBusy} onOpen={path => { void openLocalFile(path); if (layout.drawer) setSidebar(false); }} />
+        </div>
         <OutlinePanel key={view.active} entries={view.outline} activeLine={view.line}
           onSelect={line => { editor.current?.reveal(line); if (layout.drawer) setSidebar(false); }} />
       </aside>{!layout.drawer && <Splitter label="调整侧栏宽度" min={220} max={380}
@@ -556,20 +564,30 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       <div className="work-area"><div className="document-panes">
       <section className="editor-panel" aria-label="源码编辑区域" hidden={!layout.editorVisible}
         style={layout.previewVisible ? { flexBasis: editorWidth, flexGrow: 0, flexShrink: 0 } : undefined}>
-        <div className="editor-tabs" role="tablist" aria-label="打开的文件">
+        <div className="editor-tabs" role="tablist" aria-label="打开的文件" onKeyDown={event => {
+          if (!(event.target instanceof HTMLElement) || event.target.getAttribute("role") !== "tab" ||
+              !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+          const index = tabs.indexOf(event.target as HTMLButtonElement);
+          const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 :
+            (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+          tabs[next]?.focus(); tabs[next]?.click();
+          tabs[next]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }}>
           {view.open.map(path => <div key={path} className={"editor-tab " + (path === view.active ? "active" : "")}>
-            <button role="tab" aria-selected={path === view.active} onClick={() => session.activate(path)} title={path}><Icon name="file" size={14} />{path.split("/").at(-1)}{view.files.find(file => file.path === path)?.dirty && <span className="dirty-dot" />}</button>
+            <button role="tab" tabIndex={path === view.active ? 0 : -1} aria-selected={path === view.active} onClick={() => session.activate(path)} title={path}><Icon name="file" size={14} /><span className="tab-filename">{view.open.filter(item => item.split("/").at(-1) === path.split("/").at(-1)).length > 1 ? path : path.split("/").at(-1)}</span>{view.files.find(file => file.path === path)?.dirty && <span className="dirty-dot" />}</button>
             <button className="tab-close" aria-label={"关闭标签 " + path} title="关闭标签，不删除文件" onClick={() => session.close(path)}><Icon name="close" size={12} /></button>
           </div>)}
           <button className="tab-add" title="新建文件" aria-label="添加文件" disabled={workspaceBusy} onClick={newFile}><Icon name="plus" size={14} /></button>
         </div>
         <div className="editor-toolbar">
-          <Tool icon="undo" label="撤销 (Ctrl+Z)" disabled={!view.active} onClick={() => editor.current?.run("undo")} />
-          <Tool icon="redo" label="重做 (Ctrl+Y)" disabled={!view.active} onClick={() => editor.current?.run("redo")} />
+          <Tool icon="undo" label="撤销 (Ctrl+Z)" disabled={!view.active || workspaceBusy} onClick={() => editor.current?.run("undo")} />
+          <Tool icon="redo" label="重做 (Ctrl+Y)" disabled={!view.active || workspaceBusy} onClick={() => editor.current?.run("redo")} />
           <span className="toolbar-divider" />
-          <button className="text-tool" title="插入粗体命令" aria-label="插入粗体" disabled={!view.active} onClick={() => editor.current?.run("bold")}><b>B</b></button>
-          <button className="text-tool" title="插入斜体命令" aria-label="插入斜体" disabled={!view.active} onClick={() => editor.current?.run("italic")}><i>I</i></button>
-          <ActionMenu title="插入 LaTeX 结构" label={<>插入 <span className="menu-chevron">⌄</span></>}>
+          <button className="text-tool" title="插入粗体命令" aria-label="插入粗体" disabled={!view.active || workspaceBusy} onClick={() => editor.current?.run("bold")}><b>B</b></button>
+          <button className="text-tool" title="插入斜体命令" aria-label="插入斜体" disabled={!view.active || workspaceBusy} onClick={() => editor.current?.run("italic")}><i>I</i></button>
+          <ActionMenu title="插入 LaTeX 结构" label={<>插入 <span className="menu-chevron"><Icon name="chevron" size={12} /></span></>}>
             {([["section", "章节"], ["subsection", "小节"], ["equation", "编号公式"],
               ["itemize", "无序列表"], ["enumerate", "有序列表"], ["table", "两列表格"],
               ["reference", "交叉引用"]] as const).map(([command, label]) =>
@@ -626,11 +644,10 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
       <span>行 {view.line}，列 {view.column}</span><span className="encoding-status">UTF-8</span><span className="encoding-status">LaTeX</span></footer>
     {modal && <Dialog key={modal} className={modal === "conflict" ? "conflict-modal" : ""}
       labelId="dialog-title" onClose={() => setModal(null)}>
-        <div className="modal-title"><h2 id="dialog-title">{modal === "settings" ? "本地设置与会话" : modal === "trash" ? "项目回收站" : modal === "directory" ? "目录管理" : modal === "manage" ? ({ create: '新建本地文件', rename: '重命名文件', remove: '删除文件' })[fileOperation] : modal === "conflict" ? "处理文件冲突" : modal === "new" ? "新建草稿文件" : "你的本地写作工作台"}</h2><Tool icon="close" label="关闭对话框" onClick={() => setModal(null)} /></div>
+        <div className="modal-title"><h2 id="dialog-title">{modal === "settings" ? "设置" : modal === "trash" ? "项目回收站" : modal === "directory" ? "目录管理" : modal === "manage" ? ({ create: '新建本地文件', rename: '重命名文件', remove: '删除文件' })[fileOperation] : modal === "conflict" ? "处理文件冲突" : modal === "new" ? "新建草稿文件" : "快捷键与帮助"}</h2><Tool icon="close" label="关闭对话框" onClick={() => setModal(null)} /></div>
         {modal === "settings" ? <SettingsForm preferencesDraft={preferencesDraft} setPreferencesDraft={setPreferencesDraft}
-          settingsBusy={settingsBusy} settingsError={settingsError} recentWorkspaces={recentWorkspaces}
-          projectNames={projectNames} workspaceBusy={workspaceBusy} sessionReady={sessionReady}
-          onSave={() => void savePreferences()} onClose={() => setModal(null)} onOpenWorkspace={id => void openWorkspace(id)} /> : modal === "trash" ? <>
+          settingsBusy={settingsBusy} settingsError={settingsError}
+          onSave={() => void savePreferences()} onClose={() => setModal(null)} /> : modal === "trash" ? <>
           <p>删除内容保留在项目内，仅能恢复到记录的原路径；不会覆盖同名文件或目录。</p>
           <div className="trash-list">
             {trashEntries.map(entry => <div key={entry.trashId} className="trash-entry">
@@ -689,14 +706,13 @@ function Workbench({ session: draftSession, status, error, save: saveDraft, draf
           {fileError && <p className="error" role="alert">{fileError}</p>}
           <div className="modal-actions"><button type="button" onClick={() => setModal(null)}>取消</button><button className="primary" type="submit">创建草稿</button></div>
         </form> : <>
-          <p>已支持源码编辑、多标签、文件筛选、章节跳转和自动草稿缓存。</p>
+          <p className="muted">常用操作</p>
           <div className="shortcut"><span>编译 / 取消编译</span><kbd>Ctrl + Enter</kbd></div>
           <div className="shortcut"><span>保存文件 / 缓存草稿</span><kbd>Ctrl + S</kbd></div>
           <div className="shortcut"><span>查找当前文档</span><kbd>Ctrl + F</kbd></div>
           <div className="shortcut"><span>撤销 / 重做</span><kbd>Ctrl + Z / Y</kbd></div>
-          <p className="muted">缓存只属于当前应用配置。清除应用缓存会丢失草稿；异常退出可能丢失尚未缓存的最后输入。关闭标签不会删除文件。</p>
-          <p className="muted">已支持本地项目、文件/目录管理、冲突恢复、搜索、可插拔 TeX 编译、PDF.js 预览和本机会话设置。磁盘变化不会覆盖并发编辑，删除内容保存在项目内 .lightoverleaf-trash。双向 SyncTeX 需要本机工具链提供 synctex.exe；未检测到 TeX 时不会模拟编译成功。</p>
-          <div className="modal-actions"><button className="primary" onClick={() => setModal(null)}>开始写作</button></div>
+          <p className="help-note">草稿保存在当前应用中。重要内容请通过“项目 → 导出草稿”备份；关闭文件标签不会删除文件。</p>
+          <div className="modal-actions"><button className="primary" onClick={() => setModal(null)}>关闭</button></div>
         </>}
     </Dialog>}
   </main>;

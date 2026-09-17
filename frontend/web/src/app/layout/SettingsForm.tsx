@@ -1,34 +1,40 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import type { Preferences } from "../../native-api";
 export function SettingsForm({ preferencesDraft, setPreferencesDraft, settingsBusy, settingsError,
-  recentWorkspaces, projectNames, workspaceBusy, sessionReady, onSave, onClose, onOpenWorkspace }: {
+  onSave, onClose }: {
   preferencesDraft: Preferences; setPreferencesDraft: Dispatch<SetStateAction<Preferences>>;
-  settingsBusy: boolean; settingsError: string; recentWorkspaces: string[];
-  projectNames: Record<string, string>; workspaceBusy: boolean; sessionReady: boolean;
-  onSave(): void; onClose(): void; onOpenWorkspace(id: string): void;
+  settingsBusy: boolean; settingsError: string; onSave(): void; onClose(): void;
 }) {
-  return <form onSubmit={event => { event.preventDefault(); onSave(); }}>
-          <p><b>编译工具链：</b>内置 MiKTeX Runtime（Full 版固定使用，不读取系统 TeX）。</p>
-          <p>编译引擎：pdfLaTeX（内置）。旧版引擎设置已统一迁移；不自动处理 BibTeX/Biber。</p>
-          <label htmlFor="tex-timeout">编译超时（毫秒）</label>
-          <input id="tex-timeout" type="number" min={1000} max={300000} value={preferencesDraft.timeoutMs}
-            disabled={settingsBusy} onChange={event => setPreferencesDraft(current => ({ ...current,
-              timeoutMs: Number(event.target.value) }))} />
-          <label htmlFor="compile-mode">编译触发方式</label>
-          <select id="compile-mode" value={preferencesDraft.compileMode} disabled={settingsBusy}
-            onChange={event => setPreferencesDraft(current => ({ ...current,
-              compileMode: event.target.value as Preferences['compileMode'] }))}>
-            <option value="live">实时预览（停止输入 900 ms）</option>
-            <option value="onSave">仅保存后编译</option>
-            <option value="manual">仅手动编译</option>
-          </select>
-          <p>重启后自动恢复上次项目及标签；也可以通过“项目 → 最近项目”打开其他已授权目录。路径保存在本机 SQLite，不向前端开放任意路径访问。</p>
-          <div className="recent-workspaces"><b>最近项目</b>
-            {recentWorkspaces.map(root => <button type="button" key={root} disabled={workspaceBusy || !sessionReady} onClick={() => onOpenWorkspace(root)}>{projectNames[root] ?? root}</button>)}
-            {!recentWorkspaces.length && <span className="muted">暂无记录</span>}
-          </div>
-          {settingsError && <p className="error" role="alert">{settingsError}</p>}
-          <div className="modal-actions"><button type="button" onClick={onClose}>取消</button>
-            <button className="primary" type="submit" disabled={settingsBusy}>{settingsBusy ? "保存中…" : "保存设置"}</button></div>
-        </form>;
+  const [seconds, setSeconds] = useState(String(preferencesDraft.timeoutMs / 1000));
+  return <form className="settings-form" onSubmit={event => { event.preventDefault(); onSave(); }}>
+    <div className="settings-section-title">编译</div>
+    <div className="settings-field">
+      <label htmlFor="compile-mode">编译方式</label>
+      <select id="compile-mode" value={preferencesDraft.compileMode} disabled={settingsBusy}
+        aria-describedby="compile-mode-hint"
+        onChange={event => setPreferencesDraft(current => ({ ...current,
+          compileMode: event.target.value as Preferences['compileMode'] }))}>
+        <option value="live">自动编译</option><option value="onSave">保存后编译</option>
+        <option value="manual">手动编译</option>
+      </select>
+      <p id="compile-mode-hint" className="field-hint">{preferencesDraft.compileMode === "live"
+        ? "停止输入约 0.9 秒后更新预览。" : preferencesDraft.compileMode === "onSave"
+        ? "保存修改后更新预览。" : "点击顶部编译按钮，或按 Ctrl + Enter。"}</p>
+    </div>
+    <div className="settings-field">
+      <label htmlFor="tex-timeout">最长编译时间</label>
+      <div className="input-unit"><input id="tex-timeout" type="number" required min={1} max={300} step={0.001}
+        value={seconds} disabled={settingsBusy} aria-describedby="timeout-hint"
+        onChange={event => { setSeconds(event.target.value);
+          setPreferencesDraft(current => ({ ...current, timeoutMs: Math.round(Number(event.target.value) * 1000) })); }} />
+        <span>秒</span></div>
+      <p id="timeout-hint" className="field-hint">超过此时间将停止编译。可设置 1–300 秒。</p>
+    </div>
+    <details className="settings-details"><summary>运行环境</summary>
+      <dl><div><dt>引擎</dt><dd>pdfLaTeX</dd></div><div><dt>工具链</dt><dd>内置 MiKTeX</dd></div></dl>
+    </details>
+    {settingsError && <p className="error" role="alert">{settingsError}</p>}
+    <div className="modal-actions"><button type="button" onClick={onClose}>取消</button>
+      <button className="primary" type="submit" disabled={settingsBusy}>{settingsBusy ? "保存中…" : "保存设置"}</button></div>
+  </form>;
 }

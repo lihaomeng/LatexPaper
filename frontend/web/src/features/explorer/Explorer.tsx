@@ -9,7 +9,7 @@ export function Explorer({ files, directories = [], active, activeDirectory, fil
   onRename?(path: string): void; onRemove?(path: string): void; operationsDisabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const query = filter.toLowerCase();
+  const query = filter.trim().toLowerCase();
   const tree = useMemo(() => buildTree(
     files.filter(file => file.path.toLowerCase().includes(query)).map(file => file.path),
     directories.filter(path => path.toLowerCase().includes(query))), [directories, files, query]);
@@ -46,6 +46,6 @@ export function Explorer({ files, directories = [], active, activeDirectory, fil
     {node.directory && !collapsed.has(node.path) && <div role="group">{render(node.children, depth + 1)}</div>}
   </div>);
   return <div className="file-tree" role="tree" aria-label="项目文件树">
-    {tree.length ? render(tree) : <p className="muted empty-small">没有匹配的文件</p>}
+    {tree.length ? render(tree) : <p className="muted empty-small">{query ? "没有匹配的文件，请调整筛选条件。" : "项目中暂无文件，可点击上方 + 新建。"}</p>}
   </div>;
 }

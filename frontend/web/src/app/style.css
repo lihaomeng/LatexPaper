@@ -1,14 +1,14 @@
 :root { color-scheme: dark; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 13px; color: var(--text-primary); background: var(--surface-base); font-synthesis: none; }
-* { box-sizing: border-box; }
+*:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { box-sizing: border-box; }
 body { margin: 0; }
-button, input, select { font: inherit; }
-button { color: inherit; border: 0; background: transparent; cursor: pointer; }
-button:hover { background: #ffffff0b; color: #edf4f7; }
-button:disabled { cursor: not-allowed; opacity: .42; }
-button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-input, select { color: #e3e9f0; background: #171d25; border: 1px solid #465361; border-radius: 4px; outline: none; padding: 9px 11px; }
-input:focus { border-color: #71a881; }
-svg { flex-shrink: 0; vertical-align: middle; }
+button:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)), input:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)), select:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { font: inherit; }
+button:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { color: inherit; border: 0; background: transparent; cursor: pointer; }
+button:hover:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { background: #ffffff0b; color: #edf4f7; }
+button:disabled:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { cursor: not-allowed; opacity: .42; }
+button:focus-visible:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)), a:focus-visible:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { outline: 2px solid var(--focus); outline-offset: -2px; }
+input:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)), select:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { color: #e3e9f0; background: #171d25; border: 1px solid #465361; border-radius: 4px; outline: none; padding: 9px 11px; }
+input:focus:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { border-color: #71a881; }
+svg:where(:not(.monaco-editor, .monaco-editor *, .monaco-hover, .monaco-hover *)) { flex-shrink: 0; vertical-align: middle; }
 .workbench { display: flex; flex-direction: column; height: 100dvh; min-height: 420px; overflow: hidden; }
 .topbar { height: 48px; flex-shrink: 0; display: flex; align-items: center; background: var(--surface-subtle); border-bottom: 1px solid #343e47; padding: 0 12px; gap: 14px; position: relative; z-index: 30; }
 .brand { color: #e5efe8; display: flex; flex: none; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; letter-spacing: -.25px; padding: 0; }
