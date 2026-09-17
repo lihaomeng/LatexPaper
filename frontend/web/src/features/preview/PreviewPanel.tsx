@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Icon } from "../../shared/Icon";
 import { previewPresentation } from "./presentation";
 import { PdfCanvas } from "./PdfCanvas";
@@ -13,10 +14,13 @@ export function PreviewPanel({ build, onConfigure,
   zoomMode?: PdfZoomMode; onZoomModeChange?(mode: PdfZoomMode): void;
   logsOpen?: boolean; onToggleLogs?(): void;
 }) {
+  const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
+  const hasPdf = Boolean(build.candidate?.pdf ?? build.pdf);
   const { summary } = previewPresentation(build.state);
   return <section className="preview-panel" aria-label="PDF 预览面板">
     <div className="preview-toolbar">
-      <span className="preview-title"><Icon name="pdf" size={14} />PDF 预览</span>
+      {!hasPdf && <span className="preview-title"><Icon name="pdf" size={14} />PDF 预览</span>}
+      <div className="preview-controls-host" ref={setToolbarHost} hidden={!hasPdf} />
       <div className="preview-actions">
         <button className="tool-button" aria-pressed={logsOpen} onClick={onToggleLogs}
           title="编译日志与诊断" aria-label="编译日志与诊断"><Icon name="terminal" size={16} /></button>
@@ -29,7 +33,7 @@ export function PreviewPanel({ build, onConfigure,
         onReverse={(build.candidate?.syncTexAvailable ?? build.syncTexAvailable) ? onReverse : undefined}
         onCommit={build.candidate ? () => onPreviewCommit?.(build.candidate!.generation) : undefined}
         onReject={build.candidate ? message => onPreviewReject?.(build.candidate!.generation, message) : undefined}
-        target={target} zoom={zoom} onZoomChange={onZoomChange}
+        toolbarHost={toolbarHost} target={target} zoom={zoom} onZoomChange={onZoomChange}
         zoomMode={zoomMode} onZoomModeChange={onZoomModeChange} /> : <div className="preview-empty">
         <div className="paper-icon"><Icon name="pdf" size={34} /></div>
         <span className="small-label">PDF PREVIEW</span>

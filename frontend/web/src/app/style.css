@@ -75,7 +75,7 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .draft-notice span { min-width: 0; flex: 1; overflow-wrap: anywhere; line-height: 1.6; padding: 8px 0; }
 .draft-notice button { flex: none; padding: 8px; }
 .preview-panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #293340; }
-.preview-toolbar { height: 37px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; gap: 8px; border-bottom: 1px solid #3b4854; }
+.preview-toolbar { min-height: 38px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 2px 6px; gap: 4px; border-bottom: 1px solid #3b4854; }
 .compile-button { min-height: 32px; font-weight: 600; display: flex; align-items: center; gap: 7px; background: #4e6556; border: 1px solid #6f8b76; border-radius: 4px; padding: 4px 8px; font-size: 12px; color: #d3e9d7; white-space: nowrap; }
 .compile-button span { border-left: 1px solid #718977; padding-left: 7px; }
 .preview-action { margin-top: 12px; border: 1px solid #6f8b76; border-radius: 4px; background: #3f5948; color: #d3e9d7; padding: 7px 12px; }
@@ -140,15 +140,15 @@ kbd { font: 10px Consolas, monospace; color: #a7bdc8; background: #1d2630; borde
 .pdf-controls { display: flex; flex: none; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; min-height: 34px; padding: 4px 8px; background: #202a35; border-bottom: 1px solid #384551; }
 .zoom-controls { display: inline-flex; align-items: center; gap: 3px; }
 
-.pdf-scroll { min-height: 0; min-width: 0; flex: 1; overflow: auto; overflow-y: scroll; padding: 16px; text-align: left; }
+.pdf-scroll { min-height: 0; min-width: 0; flex: 1; overflow: auto; overflow-y: scroll; scrollbar-gutter: stable; padding: 8px; text-align: left; }
 .pdf-page { position: relative; display: block; width: max-content; margin: 0 auto; line-height: 0; }
-.pdf-scroll canvas { display: block; background: white; box-shadow: 0 3px 16px #0006; }
+.pdf-scroll canvas { display: block; background: white; box-shadow: 0 1px 5px #0005; }
 .synctex-marker { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); border: 2px solid #e34c4c; border-radius: 50%; background: #ef535044; box-shadow: 0 0 0 4px #ef535022; pointer-events: none; }
 .startup { height: 100dvh; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 30px; text-align: center; color: #91b69c; }
 .startup h1 { color: #dce5de; font-size: 25px; font-weight: 400; }.startup p { color: #8e9dad; max-width: 480px; line-height: 1.8; }
 .startup button { border: 1px solid #5c7767; border-radius: 4px; padding: 8px 15px; }
 ::-webkit-scrollbar { width: 7px; height: 5px; }::-webkit-scrollbar-thumb { background: #516071; border-radius: 4px; }::-webkit-scrollbar-track { background: transparent; }
 
-.pdf-continuous .pdf-page { margin-bottom: 20px; background: white; scroll-margin-top: 16px; }
+.pdf-continuous .pdf-page { margin-bottom: 12px; background: white; scroll-margin-top: 8px; }
 .pdf-continuous .pdf-page:last-child { margin-bottom: 0; }
 .pdf-page-error { position: absolute; top: 20px; left: 20px; right: 20px; color: #a32222; font-size: 12px; line-height: 1.5; }

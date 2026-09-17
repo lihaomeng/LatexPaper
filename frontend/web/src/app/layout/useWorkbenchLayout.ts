@@ -5,13 +5,14 @@ type Layout = {
   sidebar: boolean; preview: boolean; sidebarWidth: number; ratio: number;
   preset: LayoutPreset; zoom: number; zoomMode: PdfZoomMode;
 };
-const storageKey = "lightoverleaf.layout.v2";
+const storageKey = "lightoverleaf.layout.v3";
 const defaults: Layout = { sidebar: true, preview: true, sidebarWidth: 260, ratio: .5,
   preset: "split", zoom: 100, zoomMode: "width" };
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 function readLayout(): Layout {
   try {
-    const stored: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "null");
+    const current = localStorage.getItem(storageKey);
+    const stored: unknown = JSON.parse(current ?? localStorage.getItem("lightoverleaf.layout.v2") ?? "null");
     if (!stored || typeof stored !== "object") return defaults;
     const v = stored as Partial<Layout>;
     return {
@@ -21,7 +22,7 @@ function readLayout(): Layout {
       ratio: Number.isFinite(v.ratio) ? clamp(v.ratio!, .2, .8) : .5,
       preset: v.preset === "edit" || v.preset === "read" ? v.preset : "split",
       zoom: Number.isFinite(v.zoom) ? clamp(v.zoom!, 50, 300) : 100,
-      zoomMode: v.zoomMode === "page" || v.zoomMode === "custom" ? v.zoomMode : "width",
+      zoomMode: current && (v.zoomMode === "page" || v.zoomMode === "custom") ? v.zoomMode : "width",
     };
   } catch { return defaults; }
 }

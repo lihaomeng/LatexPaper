@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFDocumentLoadingTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useDevicePixelRatio } from "../../shared/useDevicePixelRatio";
@@ -7,8 +8,9 @@ import { usePdfPageRaster, type PublishedPage } from "./usePdfPageRaster";
 import { ContinuousPdfPage } from "./ContinuousPdfPage";
 import type { PdfTarget, PdfZoomMode } from "./model";
 GlobalWorkerOptions.workerSrc = workerUrl;
-export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, onZoomChange, zoomMode = "width", onZoomModeChange }: {
+export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, onZoomChange, zoomMode = "width", onZoomModeChange, toolbarHost }: {
   data: Uint8Array;
+  toolbarHost?: HTMLElement | null;
   onReverse?: (page: number, x: number, y: number) => void;
   onCommit?: () => void;
   onReject?: (message: string) => void;
@@ -40,6 +42,7 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
     measure();
     return () => { observer.disconnect(); cancelAnimationFrame(tick); };
   }, []);
+  const readingAnchor = useRef<{ page: number; fraction: number } | null>(null);
   const marker = useRef<HTMLSpanElement>(null);
   const published = useRef<PublishedPage | null>(null);
   const committedDocument = useRef<PDFDocumentProxy | null>(null);
@@ -62,8 +65,8 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
     settings: typeof displaySettings.current) => {
     if (settings.zoomMode === "custom") return settings.zoom / 100;
     const base = pdfPage.getViewport({ scale: 1 });
-    const fitWidth = Math.max(1, (settings.width || 600) - 32) / base.width;
-    const fitHeight = Math.max(1, (settings.height || 800) - 32) / base.height;
+    const fitWidth = Math.max(1, (settings.width || 600) - 16) / base.width;
+    const fitHeight = Math.max(1, (settings.height || 800) - 16) / base.height;
     return Math.max(.1, Math.min(3, settings.zoomMode === "page" ? Math.min(fitWidth, fitHeight) : fitWidth));
   };
   const [frame, setFrame] = useState<{ page: number; scale: number; width: number; height: number } | null>(null);
@@ -94,6 +97,17 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
           await raster.task.promise;
           if (!active || !canvas.current) return;
           if (settingsKey(settings) !== settingsKey(displaySettings.current)) continue;
+          const container = scroll.current;
+          if (container && committedDocument.current) {
+            const top = container.getBoundingClientRect().top;
+            const pages = Array.from(container.querySelectorAll<HTMLElement>("[data-pdf-page]"));
+            const visible = pages.find(item => item.getBoundingClientRect().bottom > top + 8);
+            if (visible) {
+              const rect = visible.getBoundingClientRect();
+              readingAnchor.current = { page: Number(visible.dataset.pdfPage),
+                fraction: Math.max(0, Math.min(1, (top - rect.top) / Math.max(1, rect.height))) };
+            }
+          }
           publishRaster(canvas.current, raster);
           published.current = { document: candidate, number: 1, scale, deviceRatio: settings.deviceRatio };
           setFrame({ page: 1, scale, width: raster.viewport.width, height: raster.viewport.height });
@@ -107,8 +121,7 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
       committed = true;
       setSizes(pageSizes);
       setDocument(candidate);
-      setPage(1);
-      if (scroll.current) scroll.current.scrollTop = 0;
+      setPage(Math.min(readingAnchor.current?.page ?? 1, candidate.numPages));
       setError("");
       setLoading(false);
       commitCallback.current?.();
@@ -126,6 +139,19 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
       if (!committed) void task.destroy();
     };
   }, [data]);
+
+  useLayoutEffect(() => {
+    const anchor = readingAnchor.current;
+    const container = scroll.current;
+    if (!document || !container || !anchor) return;
+    const number = Math.min(anchor.page, document.numPages);
+    const element = container.querySelector<HTMLElement>(`[data-pdf-page="${number}"]`);
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      container.scrollTop += rect.top - container.getBoundingClientRect().top + rect.height * anchor.fraction;
+    }
+    readingAnchor.current = null;
+  }, [document]);
 
   useEffect(() => () => { if (committedTask.current) void committedTask.current.destroy(); }, []);
   const firstScale = sizes[0] ? pageScale({ getViewport: () => sizes[0] }, displaySettings.current) : zoom / 100;
@@ -180,10 +206,7 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
       ? Math.max(1, Math.min(document.numPages, requested)) : page;
     goToPage(next); setPageText(String(next));
   };
-  return <div className="pdf-viewer">
-    {(loading || error || pageError) && <div className={"pdf-render-status " + (error || pageError ? "error" : "loading")} role="status">
-      {error ? `新预览渲染失败，继续显示上一份成功 PDF：${error}` : pageError ? `页面渲染失败：${pageError}` : "正在验证并渲染新 PDF，当前预览保持不变…"}
-    </div>}
+  const controls = (
     <div className="pdf-controls">
       <div className="page-controls">
         <button aria-label="上一页" title="上一页" disabled={page <= 1} onClick={() => goToPage(page - 1)}>‹</button>
@@ -196,10 +219,12 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
           onClick={() => goToPage(page + 1)}>›</button>
       </div>
       <div className="zoom-controls">
+        <button className="fit-width-button" aria-label="铺满 PDF 栏宽" title="铺满栏宽，连续阅读"
+          aria-pressed={zoomMode === "width"} onClick={() => onZoomModeChange?.("width")}>适宽</button>
         <button aria-label="缩小 PDF" title="缩小" disabled={effectiveZoom <= 50} onClick={() => changeZoom(effectiveZoom - 25)}>−</button>
         <select aria-label="PDF 缩放模式" value={zoomMode}
           onChange={event => onZoomModeChange?.(event.target.value as PdfZoomMode)}>
-          <option value="width">适合宽度</option><option value="page">整页显示</option>
+          <option value="width">适宽 · {effectiveZoom}%</option><option value="page">整页 · {effectiveZoom}%</option>
           <option value="custom">{zoomMode === "custom" ? zoom + "%" : "自定义比例"}</option>
         </select>
         {zoomMode === "custom" && <input className="zoom-number" type="number" min={50} max={300} step={10}
@@ -210,7 +235,13 @@ export function PdfCanvas({ data, onReverse, onCommit, onReject, target, zoom, o
           }} />}
         <button aria-label="放大 PDF" title="放大" disabled={effectiveZoom >= 300} onClick={() => changeZoom(effectiveZoom + 25)}>+</button>
       </div>
-    </div><div className="pdf-scroll pdf-continuous" ref={scroll} aria-label="连续 PDF 页面">
+    </div>);
+  return <div className="pdf-viewer">
+    {(loading || error || pageError) && <div className={"pdf-render-status " + (error || pageError ? "error" : "loading")} role="status">
+      {error ? `新预览渲染失败，继续显示上一份成功 PDF：${error}` : pageError ? `页面渲染失败：${pageError}` : "正在验证并渲染新 PDF，当前预览保持不变…"}
+    </div>}
+    {toolbarHost ? createPortal(controls, toolbarHost) : controls}
+    <div className="pdf-scroll pdf-continuous" ref={scroll} aria-label="连续 PDF 页面">
       <div className="pdf-page" data-pdf-page="1"><canvas ref={canvas} aria-label="PDF 第 1 页"
         title={onReverse ? "双击跳转到源码" : undefined}
         onDoubleClick={event => {
