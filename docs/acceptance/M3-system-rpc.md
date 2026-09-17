@@ -15,7 +15,7 @@
 - 前端 V2 传输可替换，校验响应关联、限制在途请求、拒绝重复在途 ID、处理超时／AbortSignal／迟到回调。
 - 桌面就绪检查依次完成 V1 Ping、V2 Ping 和 V2 Capabilities，不用 Fake 通过生产 Smoke。
 
-主要文件：`contracts/rpc/v2/system.schema.json`、`tools/contractcodegen/protocol.py`、`src/modules/system/application/`、`src/transport/rpc/`、`src/transport/loopback/`、`src/transport/cef/`、`frontend/web/src/native-api/system.ts`。
+主要文件：`contracts/rpc/v2/system.schema.json`、`tools/contractcodegen/protocol.py`、`backend/latexlocalservice/app/system/application/`、`backend/latexlocalservice/transport/rpc/`、`backend/latexlocalservice/transport/loopback/`、`backend/latexlocalservice/transport/cef/`、`frontend/web/src/native-api/system.ts`。
 
 ## 实际验证
 
@@ -49,7 +49,7 @@ Loopback 验证 Fake 能力替换、只读重复调用、未知方法、非法�
 
 ### 会话生命周期核心增量（2026-09-11）
 
-新增 `src/transport/rpc/include/lightoverleaf/rpc/krpcsession.h`、`core/krpcsession.cpp` 与 `tests/krpcsessiontests.cpp`。它仍属于纯 RPC Core，不引入 Qt、CEF、系统 I/O 或工作线程。
+新增 `backend/latexlocalservice/transport/rpc/include/lightoverleaf/rpc/krpcsession.h`、`core/krpcsession.cpp` 与 `tests/krpcsessiontests.cpp`。它仍属于纯 RPC Core，不引入 Qt、CEF、系统 I/O 或工作线程。
 
 - 单个 Dispatcher 线程拥有会话；Worker 仅持有 stop_token，通过 Dispatcher 返回完成结果，不持有会话裸指针。
 - 最多 64 个在途请求加未消费终态事件。受理时预留终态容量，避免完成事件被静默丢弃。

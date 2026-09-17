@@ -63,7 +63,7 @@ ctest --preset desktop-release
 
 ## 2026-09-11：授权后 CSP 修复与复验
 
-用户针对仅放开 `style-src-attr 'unsafe-inline'` 回复“可以”。本次同步修改 `web/index.html` 和 `src/platform/cef/kcefruntime.cpp`，未放宽 script-src、style-src、Worker 来源或桌面 connect-src；随机 nonce 保留。样式注入防护降低的风险见 ADR 0003。新增 `frontend/web/tests/csp.test.ts` 防止权限误扩大。
+用户针对仅放开 `style-src-attr 'unsafe-inline'` 回复“可以”。本次同步修改 `web/index.html` 和 `backend/latexlocalservice/app/platform/cef/kcefruntime.cpp`，未放宽 script-src、style-src、Worker 来源或桌面 connect-src；随机 nonce 保留。样式注入防护降低的风险见 ADR 0003。新增 `frontend/web/tests/csp.test.ts` 防止权限误扩大。
 
 实际执行环境：Windows、VS2019 x64、CEF 150、Node 24；工作目录为仓库根目录，预览服务工作目录为 web。
 

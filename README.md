@@ -23,11 +23,11 @@ out/electron-dev/bin/Release/LightOverLeaf.exe
 ## 模块边界
 
 - `frontend/electron/src/`：窗口、原生目录对话框、沙箱 preload、资源加载、C++ 进程生命周期。
-- `apps/backend/`：C++ 管道进程入口和端点调度。
-- `apps/desktop/`：复用的 C++ 业务装配。
+- `backend/latexlocalservice/app/backend/`：C++ 管道进程入口和端点调度。
+- `backend/latexlocalservice/app/composition/`：复用的 C++ 业务装配。
 - `frontend/web/src/`：React/TypeScript、Monaco、PDF.js 与 NativeApi。
-- `src/modules/`：业务 Domain、Application、Ports 与 Adapters。
-- `src/transport/json/`：不依赖 Qt/CEF 的 JSON 传输适配。
+- `backend/latexlocalservice/`：按 texengine、workspace、persistence、transport、app 分组；业务模块内部保留 Domain、Application、Ports 与 Adapters 分层。
+- `backend/latexlocalservice/transport/json/`：不依赖 Qt/CEF 的 JSON 传输适配。
 - `contracts/rpc/`：前后端共用 RPC 契约。
 - `scripts/`：开发命令入口；`tools/`：契约生成和架构检查实现。
 

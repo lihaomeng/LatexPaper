@@ -1,6 +1,6 @@
 # 模块模板
 
-M0 的可编译模板位于 `src/modules/document/`（System、Workspace 采用同样结构）。
+M0 的可编译模板位于 `backend/latexlocalservice/workspace/document/`（System、Workspace 采用同样结构）。
 
 新增业务模块时显式创建并注册以下 Target：
 

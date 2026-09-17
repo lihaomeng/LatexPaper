@@ -18,7 +18,9 @@ function(lol_check_registration directory)
     foreach(property INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
       get_target_property(paths ${target} ${property})
       foreach(path IN LISTS paths)
-        if(path STREQUAL "${PROJECT_SOURCE_DIR}" OR path STREQUAL "${PROJECT_SOURCE_DIR}/src")
+        if(path STREQUAL "${PROJECT_SOURCE_DIR}" OR path STREQUAL "${PROJECT_SOURCE_DIR}/backend"
+          OR path STREQUAL "${PROJECT_SOURCE_DIR}/backend/latexlocalservice"
+          OR path MATCHES "/backend/latexlocalservice/(app|texengine|workspace|persistence|transport)$")
           message(FATAL_ERROR "Broad include root forbidden: ${target} -> ${path}")
         endif()
       endforeach()

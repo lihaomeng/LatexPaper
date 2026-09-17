@@ -1031,3 +1031,6 @@ M0 不安装 TeX、不实现 Monaco、不实现 PDF.js、不建立云端/AI/协�
 默认构建 desktop-release。可指定其他预设，例如 `scripts/build.ps1 -Preset desktop-debug --dev`。开发模式显式设置 BUILD_TESTING=OFF，前端执行 npm ci 和 npm run build（含 TypeScript 与协议生成），保留配置阶段架构检查。产物仍在所选 preset 的 bin/Release 或 bin/Debug 中，现存测试二进制不会被删除，也不会参与本次构建。
 
 不带 --dev 的 build.ps1 会重新配置为 BUILD_TESTING=ON、LIGHTOVERLEAF_DEV_BUILD=OFF，恢复原构建流程。测试与打包脚本仍保留为显式命令；后续不自动调用，除非用户另行要求。
+## 2026-09-17：后端目录统一
+
+现行原生源码根为 backend/latexlocalservice，下设 texengine、workspace、persistence、transport、app；目录名不含连字符。历史文件树仅作设计背景，实际映射见 backend/latexlocalservice/README.md。C++ 头文件命名空间、Target 元数据与依赖规则保持不变；架构检查必须扫描新位置，不能因旧目录不存在而跳过校验。共享协议与夹具仍位于根目录 contracts 和 tests/fixtures。

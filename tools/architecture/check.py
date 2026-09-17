@@ -71,16 +71,27 @@ def validate(records, source):
     # Both public and private core source is checked; an implementation include
     # must not provide an escape hatch around the target graph.
     forbidden = re.compile(r'\b(QString|QObject|CefRefPtr|HWND|HANDLE|QVariant|nlohmann|sqlite3)\b|#\s*include\s*[<"](?:Q[A-Z]|windows\.h|filesystem|.*cef_|.*json)')
-    for root in [source / 'src/kernel', source / 'src/modules', source / 'src/transport/rpc']:
+    service = source / 'backend/latexlocalservice'
+    modules = {
+        'app/system': 'system', 'workspace/project': 'workspace',
+        'workspace/document': 'document', 'workspace/search': 'search',
+        'workspace/export': 'export', 'texengine/build': 'build',
+        'texengine/preview': 'preview', 'texengine/navigation': 'navigation',
+        'persistence/preferences': 'preferences', 'persistence/session': 'session',
+    }
+    roots = {'app/kernel': None, 'transport/rpc': None, **modules}
+    for relative, module in roots.items():
+        root = service / relative
+        if not root.is_dir():
+            errors.append(f'Missing architecture source root: {relative}')
+            continue
         for path in root.rglob('*'):
             if path.suffix not in {'.h', '.cpp'} or 'adapters' in path.parts:
                 continue
             code = re.sub(r'//[^\n]*|/\*.*?\*/', '', path.read_text(encoding='utf-8'), flags=re.S)
             if forbidden.search(code):
                 errors.append(f'Framework leaked into core: {path.relative_to(source)}')
-            owner = path.relative_to(source).parts
-            if 'modules' in owner:
-                module = owner[owner.index('modules') + 1]
+            if module:
                 for imported in re.findall(r'#\s*include\s*[<"]lightoverleaf/([^/]+)/([^/]+)/', code):
                     if imported[0] not in {module, 'kernel'} and imported[1] != 'inbound':
                         errors.append(f'Cross-module private include: {path}')
